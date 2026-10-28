@@ -1,0 +1,15 @@
+@use "@/shared/styles" as ds
+
+.app-main
+  flex: 1
+
+.app-footer
+  +ds.container
+  display: flex
+  flex-wrap: wrap
+  justify-content: space-between
+  gap: ds.$space-2
+  padding-block: ds.$space-8
+  border-top: 1px solid var(--p-content-border-color)
+  color: var(--p-text-muted-color)
+  font-size: ds.$font-size-sm

@@ -1,0 +1,100 @@
+@use "@/shared/styles" as ds
+
+.level-page
+  +ds.container
+  display: grid
+  gap: ds.$space-5
+  padding-block: ds.$space-6 ds.$space-12
+
+  &__bar
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-3 ds.$space-5
+
+  &__back
+    display: inline-flex
+    align-items: center
+    gap: ds.$space-2
+    padding: ds.$space-2 ds.$space-3
+    border: 1px solid var(--p-content-border-color)
+    border-radius: ds.$radius-sm
+    color: var(--p-text-color)
+    font-size: ds.$font-size-sm
+    text-decoration: none
+
+    &:hover
+      border-color: var(--app-link)
+      color: var(--app-link)
+
+    &:focus-visible
+      +ds.focus-ring
+
+  &__heading
+    flex: 1 1 14rem
+    min-width: 0
+
+  &__eyebrow
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-xs
+    font-weight: 600
+    letter-spacing: 0.08em
+    text-transform: uppercase
+
+  &__title
+    margin: 0
+    font-size: clamp(1.25rem, 3vw, 1.75rem)
+
+  &__progress
+    display: grid
+    flex: 1 1 12rem
+    gap: ds.$space-2
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__bar-fill
+    height: 0.375rem
+
+  &__layout
+    display: grid
+    gap: ds.$space-4
+    align-items: start
+
+    +ds.media(lg)
+      grid-template-columns: 16rem minmax(0, 1fr)
+      gap: ds.$space-6
+
+.lesson
+  min-width: 0
+  padding: clamp(1.125rem, 3vw, 2rem)
+  border: 1px solid var(--p-content-border-color)
+  border-radius: ds.$radius-lg
+  background: var(--app-card)
+  box-shadow: var(--app-shadow)
+
+  &__title
+    margin: 0 0 ds.$space-5
+    font-size: clamp(1.25rem, 3vw, 1.625rem)
+    line-height: ds.$line-height-tight
+
+  &__loading,
+  &__error
+    display: grid
+    gap: ds.$space-4
+    justify-items: start
+
+  &__loading > *
+    width: 100%
+
+  &__nav
+    display: flex
+    flex-wrap: wrap
+    justify-content: space-between
+    gap: ds.$space-3
+    margin: ds.$space-6 0 0
+    padding-top: ds.$space-5
+    border-top: 1px solid var(--p-content-border-color)
+
+.visually-hidden
+  +ds.visually-hidden

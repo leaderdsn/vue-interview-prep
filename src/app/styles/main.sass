@@ -1,0 +1,88 @@
+// Global styles. Unlayered styles (scoped component styles) always win over layered ones.
+@layer reset, primevue, app
+
+@layer reset
+  *,
+  *::before,
+  *::after
+    box-sizing: border-box
+
+  html
+    -webkit-text-size-adjust: 100%
+    scroll-behavior: smooth
+
+    @media (prefers-reduced-motion: reduce)
+      scroll-behavior: auto
+
+  body
+    margin: 0
+
+  img,
+  svg
+    display: block
+    max-width: 100%
+
+@layer app
+  :root
+    --app-background: var(--p-surface-50)
+    --app-card: #ffffff
+    --app-link: #0b6b4a
+    --app-on-link: #ffffff
+    --app-soft: #e4f4ec
+    --app-good: #1b7a4b
+    --app-good-soft: #e1f3e8
+    --app-bad: #b3261e
+    --app-bad-soft: #fbe8e6
+    --app-warn: #8a5300
+    --app-warn-soft: #fff0d9
+    --app-code-bg: #1a2233
+    --app-code-fg: #e3e8f2
+    --app-code-dim: #98a3b8
+    --app-shadow: 0 1px 2px rgb(24 32 46 / 6%), 0 4px 16px rgb(24 32 46 / 6%)
+
+  :root.app-dark
+    --app-background: var(--p-surface-950)
+    --app-card: var(--p-surface-900)
+    --app-link: #6ee0ad
+    --app-on-link: #0f1a16
+    --app-soft: #14322a
+    --app-good: #5cc48c
+    --app-good-soft: #14301f
+    --app-bad: #f28b82
+    --app-bad-soft: #3a1a18
+    --app-warn: #f2b054
+    --app-warn-soft: #33270f
+    --app-code-bg: #0b1018
+    --app-code-dim: #8e99ae
+    --app-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 4px 16px rgb(0 0 0 / 25%)
+
+  html
+    color-scheme: light
+
+    &.app-dark
+      color-scheme: dark
+
+  body
+    min-height: 100dvh
+    background: var(--app-background)
+    color: var(--p-text-color)
+    font-family: ds.$font-family
+    font-size: ds.$font-size-md
+    line-height: ds.$line-height-normal
+    -webkit-font-smoothing: antialiased
+    transition: background ds.$transition-base
+
+  #app
+    display: flex
+    flex-direction: column
+    min-height: 100dvh
+
+  code
+    font-family: ds.$font-family-mono
+
+  // PrimeVue buttons rendered as links (as="a")
+  a.p-button
+    text-decoration: none
+
+  .content
+    +ds.content

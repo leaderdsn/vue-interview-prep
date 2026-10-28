@@ -1,0 +1,107 @@
+@use "@/shared/styles" as ds
+
+.track-grid
+  display: grid
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr))
+  gap: ds.$space-4
+  margin: 0
+  padding: 0
+  list-style: none
+
+.track-card
+  display: grid
+  gap: ds.$space-3
+  align-content: start
+  padding: ds.$space-5
+  border: 1px solid var(--p-content-border-color)
+  border-radius: ds.$radius-lg
+  background: var(--app-card)
+  box-shadow: var(--app-shadow)
+
+  &__title
+    margin: 0
+    font-size: ds.$font-size-lg
+
+  &__description
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__levels
+    display: grid
+    gap: ds.$space-2
+    margin: 0
+    padding: 0
+    list-style: none
+
+.level-link
+  display: grid
+  grid-template-columns: 1fr auto
+  gap: ds.$space-1 ds.$space-3
+  align-items: center
+  padding: ds.$space-3
+  border: 1px solid var(--p-content-border-color)
+  border-radius: ds.$radius-sm
+  background: var(--app-background)
+  color: var(--p-text-color)
+  text-decoration: none
+  transition: border-color ds.$transition-fast
+
+  &:hover
+    border-color: var(--app-link)
+
+  &:focus-visible
+    +ds.focus-ring
+
+  &__name
+    font-weight: 600
+
+  &__description
+    grid-column: 1 / -1
+    grid-row: 2
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+    line-height: 1.4
+
+  &__status
+    display: inline-flex
+    align-items: center
+    gap: ds.$space-2
+    grid-column: 2
+    grid-row: 1
+
+  &__topics
+    color: var(--p-text-muted-color)
+    font-family: ds.$font-family-mono
+    font-size: ds.$font-size-xs
+    font-weight: 600
+    white-space: nowrap
+
+  &__unit
+    font-family: ds.$font-family
+
+.score-pill
+  display: inline-flex
+  align-items: center
+  gap: ds.$space-1
+  padding: 3px ds.$space-2
+  border-radius: ds.$radius-full
+  background: var(--app-soft)
+  color: var(--app-link)
+  font-size: ds.$font-size-xs
+  font-weight: 600
+  white-space: nowrap
+
+  i
+    font-size: 0.65rem
+
+  &--good
+    background: var(--app-good-soft)
+    color: var(--app-good)
+
+  &--bad
+    background: var(--app-bad-soft)
+    color: var(--app-bad)
+
+.visually-hidden
+  +ds.visually-hidden

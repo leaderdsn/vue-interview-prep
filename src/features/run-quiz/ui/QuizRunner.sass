@@ -1,0 +1,247 @@
+@use "@/shared/styles" as ds
+
+.quiz-runner
+  display: grid
+  gap: ds.$space-5
+  max-width: 72ch
+
+  &__intro
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__list
+    display: grid
+    gap: ds.$space-4
+    margin: 0
+    padding: 0
+    list-style: none
+
+  &__actions
+    display: grid
+    gap: ds.$space-3
+    justify-items: start
+
+  &__warn
+    margin: 0
+    padding: ds.$space-3
+    border-left: 3px solid var(--app-warn)
+    border-radius: 0 ds.$radius-sm ds.$radius-sm 0
+    background: var(--app-warn-soft)
+    font-size: ds.$font-size-sm
+
+.quiz-result
+  display: grid
+  gap: ds.$space-3
+  justify-items: start
+  padding: ds.$space-5
+  border: 1px solid var(--p-content-border-color)
+  border-radius: ds.$radius-lg
+  background: var(--app-background)
+
+  &:focus-visible
+    +ds.focus-ring
+
+  &--passed
+    border-color: var(--app-good)
+
+  &--failed
+    border-color: var(--app-warn)
+
+  &__title
+    display: flex
+    align-items: center
+    gap: ds.$space-2
+    margin: 0
+    font-size: ds.$font-size-lg
+
+  &--passed &__title
+    color: var(--app-good)
+
+  &--failed &__title
+    color: var(--app-warn)
+
+  &__score
+    display: flex
+    flex-wrap: wrap
+    align-items: baseline
+    gap: ds.$space-2 ds.$space-4
+    margin: 0
+
+    strong
+      font-size: 2.5rem
+      line-height: 1
+      font-variant-numeric: tabular-nums
+
+  &__split
+    display: flex
+    flex-wrap: wrap
+    gap: ds.$space-2 ds.$space-4
+    margin: 0
+    padding: 0
+    list-style: none
+    font-size: ds.$font-size-sm
+
+  &__hint
+    margin: 0
+    color: var(--p-text-muted-color)
+
+.question
+  &__fieldset
+    display: grid
+    gap: ds.$space-3
+    min-width: 0
+    margin: 0
+    padding: ds.$space-4
+    border: 1px solid var(--p-content-border-color)
+    border-radius: ds.$radius-md
+
+  &__legend
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-2
+    padding-inline: ds.$space-1
+
+  &__number
+    color: var(--p-text-muted-color)
+    font-family: ds.$font-family-mono
+    font-size: 0.8125rem
+    font-weight: 600
+
+  &__tag
+    padding: 5px ds.$space-2
+    border-radius: ds.$radius-full
+    background: var(--app-soft)
+    color: var(--app-link)
+    font-size: 0.6875rem
+    font-weight: 600
+    letter-spacing: 0.06em
+    line-height: 1
+    text-transform: uppercase
+
+    &--practice
+      background: var(--app-warn-soft)
+      color: var(--app-warn)
+
+  &__verdict
+    font-size: ds.$font-size-sm
+    font-weight: 600
+
+    &.is-right
+      color: var(--app-good)
+
+    &.is-wrong
+      color: var(--app-bad)
+
+  &__text
+    margin: 0
+    font-weight: 600
+
+  &__code
+    max-width: 100%
+    margin: 0
+    padding: ds.$space-3 ds.$space-4
+    overflow-x: auto
+    border-radius: ds.$radius-md
+    background: var(--app-code-bg)
+    color: var(--app-code-fg)
+    font-family: ds.$font-family-mono
+    font-size: 0.84rem
+    line-height: 1.55
+
+  &__options
+    display: grid
+    gap: ds.$space-2
+
+  &__explain
+    display: grid
+    gap: ds.$space-2
+    justify-items: start
+    margin-top: ds.$space-2
+    padding: ds.$space-3
+    border-radius: ds.$radius-sm
+    background: var(--app-background)
+    font-size: ds.$font-size-sm
+
+    p
+      margin: 0
+
+  &__review
+    padding: 0
+    border: 0
+    background: none
+    color: var(--app-link)
+    font: inherit
+    text-decoration: underline
+    cursor: pointer
+
+    &:focus-visible
+      +ds.focus-ring
+
+.option
+  position: relative
+  display: block
+
+  &__input
+    position: absolute
+    inset: 0
+    margin: 0
+    opacity: 0
+    cursor: pointer
+
+    &:disabled
+      cursor: default
+
+    &:focus-visible + .option__box
+      +ds.focus-ring
+
+  &__box
+    display: grid
+    grid-template-columns: 1.25rem 1fr
+    gap: ds.$space-1 ds.$space-3
+    align-items: start
+    padding: ds.$space-3
+    border: 1px solid var(--p-content-border-color)
+    border-radius: ds.$radius-sm
+    line-height: 1.45
+
+    &::before
+      content: ""
+      grid-row: 1
+      width: 1rem
+      height: 1rem
+      margin-top: 2px
+      border: 2px solid var(--p-text-muted-color)
+      border-radius: 50%
+
+  &__input:checked + &__box
+    border-color: var(--app-link)
+    background: var(--app-soft)
+
+    &::before
+      border-color: var(--app-link)
+      background: radial-gradient(var(--app-link) 45%, transparent 50%)
+
+  &__text
+    grid-column: 2
+    overflow-wrap: anywhere
+
+  &__mark
+    grid-column: 2
+    font-size: 0.8125rem
+    font-weight: 600
+
+  &.right &__box
+    border-color: var(--app-good)
+    background: var(--app-good-soft)
+
+  &.wrong &__box
+    border-color: var(--app-bad)
+    background: var(--app-bad-soft)
+
+  &.right &__mark
+    color: var(--app-good)
+
+  &.wrong &__mark
+    color: var(--app-bad)

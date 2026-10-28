@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "Vue.volar",
+    "dbaeumer.vscode-eslint",
+    "vitest.explorer",
+    "EditorConfig.EditorConfig",
+    "syler.sass-indented"
+  ]
+}

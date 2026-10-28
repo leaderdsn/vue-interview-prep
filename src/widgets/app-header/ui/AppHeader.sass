@@ -1,0 +1,47 @@
+@use "@/shared/styles" as ds
+
+.app-header
+  position: sticky
+  top: 0
+  z-index: 10
+  height: ds.$header-height
+  border-bottom: 1px solid var(--p-content-border-color)
+  background: color-mix(in srgb, var(--app-background) 80%, transparent)
+  backdrop-filter: blur(12px)
+
+  &__inner
+    +ds.container
+    display: flex
+    align-items: center
+    gap: ds.$space-2
+    height: 100%
+
+    +ds.media(md)
+      gap: ds.$space-4
+
+  &__logo
+    display: inline-flex
+    align-items: center
+    gap: ds.$space-2
+    min-width: 0
+    color: var(--p-text-color)
+    font-weight: 700
+    text-decoration: none
+
+    img
+      flex-shrink: 0
+
+    &:focus-visible
+      +ds.focus-ring
+
+  &__title
+    overflow: hidden
+    white-space: nowrap
+    text-overflow: ellipsis
+
+  &__actions
+    display: flex
+    flex-shrink: 0
+    align-items: center
+    gap: ds.$space-1
+    margin-left: auto

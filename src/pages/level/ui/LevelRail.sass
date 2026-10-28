@@ -1,0 +1,84 @@
+@use "@/shared/styles" as ds
+
+.level-rail
+  min-width: 0
+
+  &__list
+    display: flex
+    gap: ds.$space-2
+    margin: 0
+    padding: 0 0 ds.$space-1
+    overflow-x: auto
+    list-style: none
+
+    +ds.media(lg)
+      position: sticky
+      top: calc(#{ds.$header-height} + #{ds.$space-4})
+      flex-direction: column
+      gap: ds.$space-1
+      overflow-x: visible
+
+    li
+      flex: 0 0 auto
+
+.rail-step
+  display: grid
+  grid-template-columns: 1.75rem auto
+  gap: ds.$space-3
+  align-items: center
+  padding: ds.$space-2 ds.$space-3
+  border-radius: ds.$radius-sm
+  color: var(--p-text-muted-color)
+  font-size: ds.$font-size-sm
+  line-height: 1.35
+  text-decoration: none
+  white-space: nowrap
+
+  +ds.media(lg)
+    grid-template-columns: 1.75rem 1fr
+    white-space: normal
+
+  &:hover
+    background: var(--app-card)
+    color: var(--p-text-color)
+
+  &:focus-visible
+    +ds.focus-ring
+
+  &__num
+    display: grid
+    place-items: center
+    width: 1.75rem
+    height: 1.75rem
+    border: 1px solid var(--p-content-border-color)
+    border-radius: 50%
+    background: var(--app-background)
+    font-family: ds.$font-family-mono
+    font-size: ds.$font-size-xs
+    font-weight: 600
+
+    i
+      font-size: 0.7rem
+
+  &--test &__num
+    border-style: dashed
+
+  &--done &__num
+    border-color: var(--app-link)
+    background: var(--app-soft)
+    color: var(--app-link)
+
+  &--active
+    background: var(--app-card)
+    box-shadow: var(--app-shadow)
+    color: var(--p-text-color)
+    font-weight: 600
+
+  &--active &__num
+    border-color: var(--app-link)
+    border-style: solid
+    background: var(--app-link)
+    color: var(--app-on-link)
+
+  &__sr
+    +ds.visually-hidden

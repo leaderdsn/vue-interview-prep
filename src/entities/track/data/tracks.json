@@ -1,0 +1,389 @@
+[
+  {
+    "id": "js",
+    "title": "JavaScript",
+    "description": "Язык целиком: типы и замыкания, this и прототипы, event loop и промисы, память, Proxy и live-coding",
+    "levels": [
+      {
+        "id": "js-junior",
+        "level": "junior",
+        "description": "Типы и сравнение, области видимости, функции и замыкания, массивы и объекты",
+        "topicTitles": [
+          "Типы данных и сравнение",
+          "Переменные и области видимости",
+          "Функции и замыкания",
+          "Массивы и объекты"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "js-middle",
+        "level": "middle",
+        "description": "this и bind, прототипы и классы, event loop и промисы, современный JS",
+        "topicTitles": [
+          "this, call/apply/bind и стрелочные функции",
+          "Прототипы и классы",
+          "Асинхронность: event loop, промисы, async/await",
+          "Современный JS: модули, коллекции, генераторы"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "js-senior",
+        "level": "senior",
+        "description": "Память и утечки, Proxy и Reflect, live-coding задачи, производительность JS",
+        "topicTitles": [
+          "Память и сборка мусора",
+          "Proxy и Reflect",
+          "Live-coding: типовые задачи с разбором",
+          "Производительность JS и main thread"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "ts",
+    "title": "TypeScript",
+    "description": "Система типов от базовых типов до conditional и mapped types, TypeScript во Vue 3 и настройка проекта",
+    "levels": [
+      {
+        "id": "ts-junior",
+        "level": "junior",
+        "description": "Базовые типы, interface и type, union и сужение, функции и enum",
+        "topicTitles": [
+          "Зачем TypeScript и базовые типы",
+          "interface и type",
+          "Union, intersection, литеральные типы и сужение",
+          "Функции и enum"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "ts-middle",
+        "level": "middle",
+        "description": "Generics, utility types, type guards и discriminated unions, TypeScript во Vue 3",
+        "topicTitles": [
+          "Generics",
+          "Utility types",
+          "Type guards и discriminated unions",
+          "TypeScript во Vue 3"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "ts-senior",
+        "level": "senior",
+        "description": "Conditional и mapped types, template literal types, структурная типизация, tsconfig и типы на уровне проекта",
+        "topicTitles": [
+          "Conditional types и infer",
+          "Mapped types и template literal types",
+          "Структурная типизация и её ловушки",
+          "Конфигурация и типизация на уровне проекта"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "vue",
+    "title": "Vue 3 и Composition API",
+    "description": "шаблоны, компоненты, реактивность, composables, Pinia, Router, устройство Vue изнутри, производительность и SSR",
+    "levels": [
+      {
+        "id": "vue-junior",
+        "level": "junior",
+        "description": "SFC и директивы, props, emits и слоты, ref, reactive и computed, watch и жизненный цикл",
+        "topicTitles": [
+          "Компоненты и шаблоны",
+          "Props, emits и слоты",
+          "ref, reactive и computed",
+          "watch и жизненный цикл"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "vue-middle",
+        "level": "middle",
+        "description": "composables, тонкости реактивности, defineModel, provide/inject, Teleport, KeepAlive, Pinia и Vue Router",
+        "topicTitles": [
+          "Composables",
+          "Реактивность на практике",
+          "Компоненты продвинуто",
+          "Pinia и Vue Router"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "vue-senior",
+        "level": "senior",
+        "description": "устройство реактивности и планировщика, компилятор и Virtual DOM, производительность, SSR и Nuxt, глобальные механизмы",
+        "topicTitles": [
+          "Как устроена реактивность",
+          "Компилятор и Virtual DOM",
+          "Производительность больших приложений",
+          "SSR, Nuxt и глобальные механизмы"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "patterns",
+    "title": "Принципы и паттерны проектирования",
+    "description": "DRY, KISS, YAGNI, SOLID, классические паттерны на примерах Vue и TypeScript, DI, конечные автоматы, слои данных и рефакторинг",
+    "levels": [
+      {
+        "id": "patterns-junior",
+        "level": "junior",
+        "description": "DRY, KISS, YAGNI, чистые функции и иммутабельность, композиция вместо наследования, обзор паттернов во фронтенде",
+        "topicTitles": [
+          "DRY, KISS, YAGNI",
+          "Чистые функции и иммутабельность",
+          "Композиция вместо наследования",
+          "Что такое паттерн проектирования"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "patterns-middle",
+        "level": "middle",
+        "description": "SOLID на Vue-компонентах, порождающие, структурные и поведенческие паттерны, паттерны компонентов Vue",
+        "topicTitles": [
+          "SOLID на фронтенде",
+          "Порождающие и структурные паттерны",
+          "Поведенческие паттерны",
+          "Паттерны компонентов Vue"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "patterns-senior",
+        "level": "senior",
+        "description": "DIP и внедрение зависимостей, конечные автоматы, Repository/Service/DTO/ACL, анти-паттерны и безопасный рефакторинг",
+        "topicTitles": [
+          "Инверсия и внедрение зависимостей",
+          "Конечные автоматы и моделирование состояний",
+          "Слои и паттерны работы с данными",
+          "Анти-паттерны, code smells и рефакторинг"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "arch",
+    "title": "Архитектура фронтенд-проекта",
+    "description": "Структура и слои проекта, состояние и API, FSD, сквозные задачи, дизайн-система, монорепозиторий, микрофронтенды, решения в команде и продакшен",
+    "levels": [
+      {
+        "id": "arch-junior",
+        "level": "junior",
+        "description": "Папки Vue-проекта, деление на компоненты, где хранить состояние, слой работы с API",
+        "topicTitles": [
+          "Структура Vue-проекта",
+          "Как делить интерфейс на компоненты",
+          "Где хранить состояние",
+          "Слой работы с API"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "arch-middle",
+        "level": "middle",
+        "description": "Слои и Feature-Sliced Design, серверное и клиентское состояние, сквозные задачи, дизайн-система",
+        "topicTitles": [
+          "Слоистая архитектура и Feature-Sliced Design",
+          "Серверное и клиентское состояние",
+          "Сквозные задачи: авторизация, ошибки, права, i18n",
+          "Дизайн-система и UI-кит"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "arch-senior",
+        "level": "senior",
+        "description": "Монорепозиторий, микрофронтенды, архитектурные решения в команде, надёжность в продакшене",
+        "topicTitles": [
+          "Монорепозиторий",
+          "Микрофронтенды",
+          "Архитектурные решения и команда",
+          "Надёжность в продакшене"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "css",
+    "title": "CSS",
+    "description": "Блочная модель, каскад, раскладки Flex и Grid, адаптивность, стили во Vue, контексты наложения, производительность, анимации и архитектура стилей",
+    "levels": [
+      {
+        "id": "css-junior",
+        "level": "junior",
+        "description": "Блочная модель, селекторы и специфичность, позиционирование, единицы и цвета",
+        "topicTitles": [
+          "Блочная модель",
+          "Селекторы, каскад и специфичность",
+          "Позиционирование",
+          "Единицы, цвета и CSS-переменные"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "css-middle",
+        "level": "middle",
+        "description": "Flexbox, Grid, адаптивная вёрстка и стили во Vue-компонентах",
+        "topicTitles": [
+          "Flexbox",
+          "Grid",
+          "Адаптивность",
+          "Стили во Vue и темизация"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "css-senior",
+        "level": "senior",
+        "description": "Контексты наложения и BFC, производительность, анимации, архитектура стилей и современный CSS",
+        "topicTitles": [
+          "Контекст наложения и контекст форматирования",
+          "Производительность CSS",
+          "Анимации и переходы",
+          "Архитектура стилей и современный CSS"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "html",
+    "title": "HTML, DOM и доступность",
+    "description": "Семантика, формы, медиа, доступность, события DOM, загрузка ресурсов, SEO, Web Components",
+    "levels": [
+      {
+        "id": "html-junior",
+        "level": "junior",
+        "description": "Структура документа, семантические теги, формы, ссылки и изображения",
+        "topicTitles": [
+          "Структура документа",
+          "Семантическая разметка",
+          "Формы",
+          "Ссылки, изображения и медиа"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "html-middle",
+        "level": "middle",
+        "description": "Доступность и ARIA, события DOM, загрузка скриптов и ресурсов, SEO для SPA",
+        "topicTitles": [
+          "Доступность: семантика, ARIA, клавиатура",
+          "DOM и события",
+          "Загрузка ресурсов",
+          "SEO-основы для SPA"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "html-senior",
+        "level": "senior",
+        "description": "Доступные модалки, табы и уведомления, аудит a11y и WCAG 2.2, Web Components, сложные формы и i18n",
+        "topicTitles": [
+          "Доступные интерактивные компоненты",
+          "Тестирование и аудит доступности",
+          "Web Components",
+          "Сложные формы и i18n"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "web",
+    "title": "Браузер, сеть и безопасность",
+    "description": "От ввода адреса до отрисовки: HTTP, запросы, хранилища, CORS, кэш, токены, реальное время, XSS/CSRF/CSP, рендеринг и скорость",
+    "levels": [
+      {
+        "id": "web-junior",
+        "level": "junior",
+        "description": "Путь от URL до пикселей, HTTP, запросы из фронтенда, хранилища браузера",
+        "topicTitles": [
+          "Что происходит, когда вводишь адрес сайта",
+          "HTTP: методы, коды ответов, заголовки",
+          "Запросы из фронтенда: fetch, axios, отмена и ошибки",
+          "Хранилища в браузере"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "web-middle",
+        "level": "middle",
+        "description": "CORS, HTTP-кэширование, аутентификация и токены, WebSocket/SSE и версии HTTP",
+        "topicTitles": [
+          "CORS и same-origin policy",
+          "Кэширование: HTTP, хэши файлов, CDN, Service Worker",
+          "Аутентификация: сессии, JWT, refresh-токены",
+          "Реальное время и версии HTTP"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "web-senior",
+        "level": "senior",
+        "description": "Безопасность фронтенда, пайплайн рендеринга, Core Web Vitals и скорость загрузки, диагностика",
+        "topicTitles": [
+          "Безопасность фронтенда: XSS, CSP, CSRF и другие",
+          "Пайплайн рендеринга браузера",
+          "Core Web Vitals и скорость загрузки",
+          "Диагностика: DevTools, RUM, утечки памяти"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "tools",
+    "title": "Тестирование и инструменты",
+    "description": "Git, npm, линтеры, Vite, Vitest и Vue Test Utils, e2e, CI/CD, Docker и командный процесс",
+    "levels": [
+      {
+        "id": "tools-junior",
+        "level": "junior",
+        "description": "Git на каждый день, npm и зависимости, ESLint и Prettier, зачем нужны тесты и первый тест",
+        "topicTitles": [
+          "Git в ежедневной работе",
+          "npm и зависимости",
+          "ESLint и Prettier",
+          "Зачем нужны тесты"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "tools-middle",
+        "level": "middle",
+        "description": "Vitest и моки, тесты Vue-компонентов, как устроен Vite, rebase, reset, revert, bisect",
+        "topicTitles": [
+          "Vitest на практике",
+          "Тестирование Vue-компонентов",
+          "Vite: как он устроен и как настраивается",
+          "Git продвинуто"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "tools-senior",
+        "level": "senior",
+        "description": "Стратегия тестирования и e2e, CI/CD-пайплайн, Docker и nginx для SPA, командный процесс и автоматизация качества",
+        "topicTitles": [
+          "E2E и стратегия тестирования",
+          "CI/CD для фронтенда",
+          "Docker и деплой фронтенда",
+          "Командный процесс и качество"
+        ],
+        "quizCount": 12
+      }
+    ]
+  }
+]

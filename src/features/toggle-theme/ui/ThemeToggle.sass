@@ -1,0 +1,18 @@
+@use "@/shared/styles" as ds
+
+.theme-toggle
+  flex-shrink: 0
+
+  // Narrower buttons on small screens so the header fits 360px.
+  :deep(.p-togglebutton-content)
+    padding-inline: ds.$space-2
+
+    +ds.media(sm)
+      padding-inline: ds.$space-3
+
+  &__option
+    display: inline-flex
+    align-items: center
+
+  &__label
+    +ds.visually-hidden

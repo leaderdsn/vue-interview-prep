@@ -1,0 +1,38 @@
+@use "@/shared/styles" as ds
+
+.manage-progress
+  display: grid
+  gap: ds.$space-3
+
+  &__actions
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-2
+
+  &__file
+    +ds.visually-hidden
+
+  &__dialog
+    max-width: min(26rem, calc(100vw - 2rem))
+    padding: ds.$space-6
+    border: 1px solid var(--p-content-border-color)
+    border-radius: ds.$radius-lg
+    background: var(--app-card)
+    color: var(--p-text-color)
+
+    &::backdrop
+      background: rgb(0 0 0 / 45%)
+
+  &__dialog-title
+    margin: 0 0 ds.$space-2
+    font-size: ds.$font-size-lg
+
+  &__dialog-text
+    margin: 0 0 ds.$space-5
+    color: var(--p-text-muted-color)
+
+  &__dialog-actions
+    display: flex
+    justify-content: flex-end
+    gap: ds.$space-2

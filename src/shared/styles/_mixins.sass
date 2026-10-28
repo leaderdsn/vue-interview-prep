@@ -1,0 +1,36 @@
+@use 'sass:map'
+@use 'tokens'
+
+// Mobile-first media query: +media(md)
+=media($breakpoint)
+  @if not map.has-key(tokens.$breakpoints, $breakpoint)
+    @error 'Unknown breakpoint "#{$breakpoint}". Available: #{map.keys(tokens.$breakpoints)}'
+  @media (min-width: map.get(tokens.$breakpoints, $breakpoint))
+    @content
+
+// Centered page container with side gutters
+=container
+  width: 100%
+  max-width: tokens.$container-width
+  margin-inline: auto
+  padding-inline: tokens.$space-4
+
+  +media(md)
+    padding-inline: tokens.$space-6
+
+// Accessible focus outline
+=focus-ring
+  outline: 2px solid var(--p-primary-color)
+  outline-offset: 2px
+
+// Hide visually, keep for screen readers
+=visually-hidden
+  position: absolute
+  width: 1px
+  height: 1px
+  padding: 0
+  margin: -1px
+  overflow: hidden
+  clip-path: inset(50%)
+  white-space: nowrap
+  border: 0
