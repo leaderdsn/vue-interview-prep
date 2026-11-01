@@ -2,6 +2,8 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useSyncStore } from '../model/syncStore'
+
 import SyncButton from './SyncButton.vue'
 
 import type * as SharedConfig from '@/shared/config'
@@ -41,5 +43,20 @@ describe('SyncButton', () => {
     const wrapper = mount(SyncButton)
 
     expect(wrapper.find('button').exists()).toBe(false)
+  })
+
+  it('показывает аккаунт, с которым синхронизирован прогресс', async () => {
+    firebase.value = { apiKey: 'key', databaseURL: 'https://db.example' }
+    const wrapper = mount(SyncButton)
+    const sync = useSyncStore()
+
+    sync.user = { name: 'Иван Петров', email: 'ivan@example.com', photoUrl: null }
+    sync.status = 'online'
+    await wrapper.vm.$nextTick()
+    const button = wrapper.find('button')
+
+    expect(button.text()).toContain('Иван')
+    expect(button.find('.sync-button__initial').text()).toBe('И')
+    expect(button.attributes('aria-label')).toBe('Аккаунт ivan@example.com: Прогресс синхронизирован')
   })
 })
