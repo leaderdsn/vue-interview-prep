@@ -1,0 +1,22 @@
+{
+  "rules": {
+    "households": {
+      ".read": false,
+      ".write": false,
+      "$h": {
+        ".read": "auth != null && $h.length >= 22",
+        ".write": "auth != null && $h.length >= 22"
+      }
+    },
+    "interviewPrep": {
+      ".read": false,
+      ".write": false,
+      "users": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    }
+  }
+}

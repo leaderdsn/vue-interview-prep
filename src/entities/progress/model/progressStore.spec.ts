@@ -154,4 +154,17 @@ describe('useProgressStore', () => {
       expect(Object.keys(store.levels)).toEqual(['keep'])
     })
   })
+
+  it('отдаёт независимую копию прогресса и применяет снимок целиком', () => {
+    const store = useProgressStore()
+    store.markTopicSeen('a', 1)
+
+    const copy = store.snapshot()
+    copy.levels.a?.seenTopics.push(5)
+    expect(store.getLevel('a').seenTopics).toEqual([1])
+
+    store.applySnapshot({ levels: { b: validLevel }, lastVisited: { levelId: 'b', step: 'quiz' } })
+    expect(store.levels).toEqual({ b: validLevel })
+    expect(store.lastVisited).toEqual({ levelId: 'b', step: 'quiz' })
+  })
 })

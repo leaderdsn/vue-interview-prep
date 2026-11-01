@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { useSyncStore } from '@/features/sync-progress'
 import { useThemeStore } from '@/features/toggle-theme'
 import { APP_LINKS, APP_VERSION, env } from '@/shared/config'
 import { AppHeader } from '@/widgets/app-header'
 
 // Initializes theme (reads saved choice and applies the dark-mode class) before first paint.
 useThemeStore()
+// Restores the sync session of a user who signed in earlier; loads Firebase only for them.
+useSyncStore().init()
 </script>
 
 <template>
