@@ -20,6 +20,7 @@
   "dependencies": {
     "@primeuix/themes": "^2.0.3",
     "@tanstack/vue-query": "^5.104.5",
+    "firebase": "^13.1.0",
     "pinia": "^4.1.0",
     "primeicons": "^7.0.0",
     "primevue": "^4.5.5",

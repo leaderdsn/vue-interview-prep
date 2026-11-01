@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { SyncButton } from '@/features/sync-progress'
 import { ThemeToggle } from '@/features/toggle-theme'
 import { APP_LINKS, env, ROUTE_NAMES } from '@/shared/config'
 
@@ -14,6 +15,7 @@ const logo = `${import.meta.env.BASE_URL}favicon.svg`
       </RouterLink>
 
       <div class="app-header__actions">
+        <SyncButton />
         <ThemeToggle />
         <Button
           as="a"

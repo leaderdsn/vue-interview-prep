@@ -10,3 +10,6 @@ export type LevelProgress = {
 }
 
 export type LastVisited = { levelId: string; step: number | 'quiz' }
+
+/** Everything that makes up the user's progress; the unit stored locally and synced between devices. */
+export type ProgressSnapshot = { levels: Record<string, LevelProgress>; lastVisited: LastVisited | null }

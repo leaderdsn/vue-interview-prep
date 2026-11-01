@@ -13,6 +13,8 @@ export default mergeConfig(
       include: ['src/**/*.spec.ts'],
       exclude: [...configDefaults.exclude],
       setupFiles: ['./vitest.setup.ts'],
+      // .env.local configures the live database; tests must not reach it
+      env: { VITE_FIREBASE_API_KEY: '', VITE_FIREBASE_DATABASE_URL: '' },
       clearMocks: true,
       restoreMocks: true,
       unstubGlobals: true,

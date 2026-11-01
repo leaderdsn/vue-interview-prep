@@ -34,6 +34,7 @@ export default defineConfig(({ command, isPreview }) => ({
     include: [
       'primevue/button',
       'primevue/message',
+      'primevue/popover',
       'primevue/progressbar',
       'primevue/selectbutton',
       'primevue/skeleton',
