@@ -6,7 +6,7 @@ import { SYNC_STATUS_LABELS } from '../config/sync'
 import { useSyncStore } from '../model/syncStore'
 
 const sync = useSyncStore()
-const { available, user, status, error, busy } = storeToRefs(sync)
+const { user, status, error, busy } = storeToRefs(sync)
 
 const popover = ref<{ toggle: (event: Event) => void } | null>(null)
 
@@ -22,7 +22,7 @@ const buttonLabel = computed(() =>
 </script>
 
 <template>
-  <template v-if="available">
+  <template v-if="sync.available">
     <Button
       class="sync-button"
       :icon="icon"
