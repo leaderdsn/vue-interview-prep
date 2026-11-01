@@ -15,7 +15,8 @@ const pkg = JSON.parse(
 ) as PackageJson
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command, isPreview }) => ({
+  base: command === 'build' || isPreview ? '/vue-interview-prep/' : '/',
   plugins: [
     vue(),
     // Auto-imports PrimeVue components only. Our own components are imported explicitly
@@ -55,4 +56,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
