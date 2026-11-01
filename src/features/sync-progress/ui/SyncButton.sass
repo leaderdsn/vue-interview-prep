@@ -1,8 +1,65 @@
 @use "@/shared/styles" as ds
 
-.sync-button__avatar
-  display: block
-  border-radius: ds.$radius-full
+.sync-button
+  flex-shrink: 0
+
+  &--account
+    gap: ds.$space-2
+    padding-inline: ds.$space-1
+
+    +ds.media(md)
+      padding-inline: ds.$space-1 ds.$space-3
+
+  &__avatar
+    position: relative
+    display: inline-flex
+    flex-shrink: 0
+    width: 28px
+    height: 28px
+
+    img
+      display: block
+      border-radius: ds.$radius-full
+
+  &__initial
+    display: inline-flex
+    align-items: center
+    justify-content: center
+    width: 100%
+    border-radius: ds.$radius-full
+    background: var(--p-primary-color)
+    color: var(--p-primary-contrast-color)
+    font-size: ds.$font-size-sm
+    font-weight: 600
+
+  // Sync status at a glance: green — synced, grey — waiting, red — error.
+  &__dot
+    position: absolute
+    right: -1px
+    bottom: -1px
+    width: 10px
+    height: 10px
+    border: 2px solid var(--app-background)
+    border-radius: ds.$radius-full
+    background: var(--p-text-muted-color)
+
+    &--online
+      background: var(--p-green-500)
+
+    &--error
+      background: var(--p-red-500)
+
+  &__name
+    display: none
+    max-width: 10rem
+    overflow: hidden
+    font-size: ds.$font-size-sm
+    font-weight: 500
+    white-space: nowrap
+    text-overflow: ellipsis
+
+    +ds.media(md)
+      display: inline
 
 .sync-panel
   display: flex

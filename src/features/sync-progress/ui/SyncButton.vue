@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import { SYNC_STATUS_LABELS } from '../config/sync'
 import { useSyncStore } from '../model/syncStore'
@@ -10,22 +10,25 @@ const { user, status, error, busy } = storeToRefs(sync)
 
 const popover = ref<{ toggle: (event: Event) => void } | null>(null)
 
-const icon = computed(() => {
-  if (!user.value) return 'pi pi-cloud-upload'
-  if (status.value === 'error') return 'pi pi-exclamation-triangle'
-  return 'pi pi-cloud'
-})
+// Google photos are sometimes rate-limited; the initial letter is shown instead.
+const photoFailed = ref(false)
+watch(() => user.value?.photoUrl, () => (photoFailed.value = false))
+
+const displayName = computed(() => user.value?.name.split(' ')[0] || user.value?.email || '')
+const initial = computed(() => (user.value?.name || user.value?.email || '?').charAt(0).toUpperCase())
 
 const buttonLabel = computed(() =>
-  user.value ? `Синхронизация: ${SYNC_STATUS_LABELS[status.value]}` : 'Сохранять прогресс в аккаунте',
+  user.value
+    ? `Аккаунт ${user.value.email || user.value.name}: ${SYNC_STATUS_LABELS[status.value]}`
+    : 'Сохранять прогресс в аккаунте',
 )
 </script>
 
 <template>
   <template v-if="sync.available">
     <Button
-      class="sync-button"
-      :icon="icon"
+      v-if="user"
+      class="sync-button sync-button--account"
       :aria-label="buttonLabel"
       :title="buttonLabel"
       :severity="status === 'error' ? 'danger' : 'secondary'"
@@ -34,14 +37,38 @@ const buttonLabel = computed(() =>
       aria-haspopup="dialog"
       @click="popover?.toggle($event)"
     >
-      <template v-if="user?.photoUrl" #icon>
-        <img class="sync-button__avatar" :src="user.photoUrl" alt="" width="24" height="24" referrerpolicy="no-referrer">
-      </template>
+      <span class="sync-button__avatar">
+        <img
+          v-if="user.photoUrl && !photoFailed"
+          :src="user.photoUrl"
+          alt=""
+          width="28"
+          height="28"
+          referrerpolicy="no-referrer"
+          @error="photoFailed = true"
+        >
+        <span v-else class="sync-button__initial" aria-hidden="true">{{ initial }}</span>
+        <span class="sync-button__dot" :class="`sync-button__dot--${status}`" aria-hidden="true" />
+      </span>
+      <span class="sync-button__name">{{ displayName }}</span>
     </Button>
+    <Button
+      v-else
+      class="sync-button"
+      icon="pi pi-cloud-upload"
+      :aria-label="buttonLabel"
+      :title="buttonLabel"
+      :severity="status === 'error' ? 'danger' : 'secondary'"
+      variant="text"
+      rounded
+      aria-haspopup="dialog"
+      @click="popover?.toggle($event)"
+    />
 
     <Popover ref="popover">
       <div class="sync-panel">
         <template v-if="user">
+          <p class="sync-panel__text">Прогресс синхронизируется с аккаунтом</p>
           <p class="sync-panel__title">{{ user.name || user.email }}</p>
           <p v-if="user.name" class="sync-panel__text">{{ user.email }}</p>
           <p class="sync-panel__status" :class="`sync-panel__status--${status}`" role="status">
