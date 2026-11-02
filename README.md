@@ -178,11 +178,11 @@ HTML тем доверенный и использует только класс
 
 Кнопка с облаком в шапке открывает вход через Google. После входа прогресс хранится в Firebase Realtime Database по пути `interviewPrep/users/<uid>/progress` и обновляется на всех устройствах в реальном времени; `localStorage` остаётся локальной копией, так что приложение работает и без сети. При первом входе прогресс устройства объединяется с прогрессом аккаунта: темы складываются, берётся лучший результат и больше попыток. Дальше источник правды — база: сброс на одном устройстве сбрасывает прогресс везде. SDK Firebase загружается отдельным чанком и только у тех, кто включил синхронизацию.
 
-Используется тот же Firebase-проект, что и у life-tracker-planner. Настройка:
+Используется тот же Firebase-проект, что и у life-tracker-planner и ussr-school-prep. Настройка:
 
 1. **Security → Authentication → Sign-in method** — включите **Google**.
 2. **Authentication → Settings → Authorized domains** — добавьте `leaderdsn.github.io` (`localhost` там уже есть).
-3. **Realtime Database → Rules** — вставьте содержимое [database.rules.json](database.rules.json) и опубликуйте. Файл содержит правила обоих проектов: каждому пользователю доступна только его запись.
+3. **Realtime Database → Rules** — вставьте содержимое [database.rules.json](database.rules.json) и опубликуйте. Файл содержит правила всех трёх проектов (`households`, `interviewPrep`, `schoolPrep`): каждому пользователю доступна только его запись. При изменении обновите файл во всех трёх репозиториях.
 4. Для локального запуска создайте `.env.local` по образцу [.env.example](.env.example).
 5. Для сайта на GitHub Pages добавьте те же значения в **Settings → Secrets and variables → Actions** репозитория
    (`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_DATABASE_URL`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`) и перезапустите workflow **Deploy**.
