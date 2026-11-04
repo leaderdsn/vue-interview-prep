@@ -84,5 +84,134 @@
         "quizCount": 12
       }
     ]
+  },
+  {
+    "id": "ux",
+    "title": "UX/UI для фронтенда",
+    "description": "Как фронтендер работает с дизайном: принципы UX, макеты и состояния интерфейса, формы и обратная связь, токены и дизайн-система, метрики и эксперименты",
+    "levels": [
+      {
+        "id": "ux-junior",
+        "level": "junior",
+        "description": "Принципы UX, работа с макетом, состояния интерфейса, типографика, цвет и сетка",
+        "topicTitles": [
+          "UX и UI: эвристики и законы, которые нужны фронтендеру",
+          "Работа с макетом: Figma, Dev Mode, отступы и вопросы дизайнеру",
+          "Состояния интерфейса: загрузка, пусто, ошибка, успех, disabled, focus",
+          "Типографика, цвет, контраст и сетка отступов"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "ux-middle",
+        "level": "middle",
+        "description": "UX форм, обратная связь и оптимистичный UI, адаптивная навигация, дизайн-токены",
+        "topicTitles": [
+          "UX форм: валидация, сообщения об ошибках, маски, автозаполнение",
+          "Обратная связь: оптимистичный UI, скелетоны, тосты, подтверждение и отмена",
+          "Адаптивный UX и навигация: mobile-first, touch targets, жесты",
+          "Дизайн-токены и связка Figma и кода"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "ux-senior",
+        "level": "senior",
+        "description": "Дизайн-система на масштабе, motion и воспринимаемая скорость, UX-метрики и A/B-тесты, процесс с дизайном",
+        "topicTitles": [
+          "Дизайн-система на масштабе: версии, вклад команд, визуальные регрессии",
+          "Motion и воспринимаемая скорость: анимации, reduced motion, отзывчивость",
+          "UX-метрики и эксперименты: аналитика, воронки, A/B-тесты, юзабилити-тесты",
+          "Инклюзивный UX, локализация и дизайн-ревью с дизайнером"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "nuxt",
+    "title": "Nuxt",
+    "description": "Nuxt 4 от основ до продакшена: структура и авто-импорты, роутинг и данные, режимы рендеринга, серверная часть на Nitro, модули, производительность и деплой",
+    "levels": [
+      {
+        "id": "nuxt-junior",
+        "level": "junior",
+        "description": "Зачем Nuxt, структура проекта и авто-импорты, файловый роутинг и layouts, получение данных",
+        "topicTitles": [
+          "Зачем Nuxt: SSR, соглашения и что он даёт поверх Vue",
+          "Структура проекта и авто-импорты: app/, components, composables, nuxt.config",
+          "Файловый роутинг, layouts, NuxtLink и middleware",
+          "Получение данных: useFetch, useAsyncData и $fetch"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "nuxt-middle",
+        "level": "middle",
+        "description": "Режимы рендеринга и routeRules, состояние и гидратация, серверная часть Nitro, SEO и ошибки",
+        "topicTitles": [
+          "Режимы рендеринга: SSR, SPA, SSG и гибридный рендеринг через routeRules",
+          "Состояние и гидратация: useState, Pinia, payload, ClientOnly",
+          "Серверная часть: Nitro, server/api, server middleware, runtimeConfig",
+          "SEO и обработка ошибок: useHead, useSeoMeta, error.vue, createError"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "nuxt-senior",
+        "level": "senior",
+        "description": "Плагины, модули и слои, кэширование и производительность, деплой на разные рантаймы, архитектура большого проекта",
+        "topicTitles": [
+          "Расширение Nuxt: плагины, модули, хуки и слои",
+          "Производительность и кэширование: routeRules, SWR, lazy-компоненты и гидратация",
+          "Деплой и рантаймы: Node, edge, статика, пресеты Nitro",
+          "Архитектура и тестирование большого Nuxt-проекта"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "git",
+    "title": "Git",
+    "description": "Git глубже ежедневных команд: модель данных, ветки и слияния, rebase и отмена изменений, стратегии ветвления, внутреннее устройство и командные процессы",
+    "levels": [
+      {
+        "id": "git-junior",
+        "level": "junior",
+        "description": "Как устроен Git, ежедневные команды, ветки и слияние, удалённые репозитории и pull request",
+        "topicTitles": [
+          "Как устроен Git: рабочая директория, индекс, коммиты и ветки",
+          "Ежедневные команды: status, add, commit, diff, log, restore",
+          "Ветки и слияние: merge, fast-forward, конфликты",
+          "Удалённые репозитории и pull request: clone, fetch, pull, push"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "git-middle",
+        "level": "middle",
+        "description": "rebase и чистая история, отмена изменений и reflog, stash, cherry-pick и bisect, стратегии ветвления",
+        "topicTitles": [
+          "rebase и чистая история: interactive rebase, squash, autosquash",
+          "Отмена и восстановление: reset, revert, reflog",
+          "Инструменты: stash, cherry-pick, bisect, blame, worktree",
+          "Стратегии ветвления и соглашения: GitHub Flow, trunk-based, Conventional Commits, хуки"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "git-senior",
+        "level": "senior",
+        "description": "Внутреннее устройство, большие репозитории, переписывание истории и безопасность, Git в командных процессах",
+        "topicTitles": [
+          "Внутреннее устройство: объекты, refs, packfiles и как работает merge",
+          "Большие репозитории: shallow и partial clone, sparse-checkout, LFS, монорепо",
+          "Переписывание истории и безопасность: force-with-lease, filter-repo, секреты, подпись коммитов",
+          "Git в командном процессе: защита веток, merge queue, теги и релизы, CODEOWNERS"
+        ],
+        "quizCount": 12
+      }
+    ]
   }
 ]
