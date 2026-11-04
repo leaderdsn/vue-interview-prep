@@ -29,3 +29,6 @@ npm-debug.log*
 .DS_Store
 *.suo
 *.sw?
+
+# Local cache of the graft code-index tool
+graft/.cache/
