@@ -213,5 +213,134 @@
         "quizCount": 12
       }
     ]
+  },
+  {
+    "id": "react",
+    "title": "React",
+    "description": "React 19 от основ до архитектуры: компоненты и хуки, как устроен рендеринг, мемоизация и React Compiler, actions и Suspense, конкурентный режим, Server Components и производительность",
+    "levels": [
+      {
+        "id": "react-junior",
+        "level": "junior",
+        "description": "JSX и компоненты, состояние и события, списки и формы, эффекты и рефы",
+        "topicTitles": [
+          "JSX и компоненты: пропсы, children, композиция",
+          "Состояние и события: useState, неизменяемость, батчинг",
+          "Списки, условия и формы: key, фрагменты, управляемые поля",
+          "Эффекты и рефы: useEffect, зависимости, очистка, useRef"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "react-middle",
+        "level": "middle",
+        "description": "Как React рендерит, мемоизация и React Compiler, свои хуки и Context, данные и формы в React 19",
+        "topicTitles": [
+          "Как React рендерит: reconciliation, Fiber и причины перерисовки",
+          "Мемоизация: memo, useMemo, useCallback и React Compiler",
+          "Свои хуки, Context и useReducer",
+          "Данные и формы в React 19: Suspense, use, actions, useOptimistic"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "react-senior",
+        "level": "senior",
+        "description": "Конкурентный рендеринг, Server Components и SSR, архитектура состояния, производительность и тестирование",
+        "topicTitles": [
+          "Конкурентный рендеринг: transitions, useDeferredValue, приоритеты",
+          "Server Components и SSR: стриминг, гидратация, Next.js App Router",
+          "Архитектура React-приложения: состояние, серверный кэш, границы ошибок",
+          "Производительность и тестирование: Profiler, виртуализация, code splitting, Testing Library"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "redux",
+    "title": "Redux",
+    "description": "Redux и Redux Toolkit: однонаправленный поток данных, слайсы и Immer, асинхронность и селекторы, нормализация, RTK Query, middleware и архитектура большого стора",
+    "levels": [
+      {
+        "id": "redux-junior",
+        "level": "junior",
+        "description": "Зачем Redux, store, actions и reducers, Redux Toolkit, связка с React",
+        "topicTitles": [
+          "Зачем Redux: единый стор, однонаправленный поток, когда он не нужен",
+          "Store, actions и reducers: чистые функции и неизменяемость",
+          "Redux Toolkit: configureStore, createSlice и Immer",
+          "Redux в React: Provider, useSelector, useDispatch"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "redux-middle",
+        "level": "middle",
+        "description": "Асинхронность и thunks, селекторы и мемоизация, нормализация состояния, RTK Query",
+        "topicTitles": [
+          "Асинхронность: thunks, createAsyncThunk, статусы загрузки",
+          "Селекторы и мемоизация: createSelector и лишние рендеры",
+          "Нормализация состояния: createEntityAdapter и структура стора",
+          "RTK Query: запросы, кэш, теги и инвалидация"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "redux-senior",
+        "level": "senior",
+        "description": "Middleware и побочные эффекты, архитектура большого стора, производительность и SSR, тестирование и выбор инструмента",
+        "topicTitles": [
+          "Middleware и побочные эффекты: устройство middleware, listener middleware, saga",
+          "Архитектура большого стора: фичи, ленивые редьюсеры, combineSlices, типизация",
+          "Производительность и SSR: подписки, батчинг, стор на сервере",
+          "Тестирование, DevTools и выбор: Redux против Zustand, MobX и серверного кэша"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "mobx",
+    "title": "MobX",
+    "description": "MobX 6 и реактивное управление состоянием в React: observable, action и computed, реакции, асинхронность, архитектура сторов, MobX-State-Tree и сравнение с Redux и реактивностью Vue",
+    "levels": [
+      {
+        "id": "mobx-junior",
+        "level": "junior",
+        "description": "Идея MobX, observable, action и computed, связка с React, реакции",
+        "topicTitles": [
+          "Зачем MobX: observable state, actions и derivations",
+          "makeObservable и makeAutoObservable: observable, action, computed",
+          "MobX в React: observer, локальный и общий стор",
+          "Реакции: autorun, reaction, when и их очистка"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "mobx-middle",
+        "level": "middle",
+        "description": "Отслеживание зависимостей и транзакции, асинхронные действия, архитектура сторов, computed и ловушки observer",
+        "topicTitles": [
+          "Как MobX отслеживает зависимости: прокси, батчинг, транзакции",
+          "Асинхронные действия: runInAction, flow, состояния загрузки",
+          "Архитектура сторов: RootStore, связи между сторами, Context",
+          "computed в деталях, comparer и ловушки observer"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "mobx-senior",
+        "level": "senior",
+        "description": "MobX-State-Tree, производительность, SSR и тестирование, сравнение с другими подходами",
+        "topicTitles": [
+          "MobX-State-Tree: модели, снапшоты, патчи, middleware",
+          "Производительность: гранулярность реакций, большие коллекции, профилирование",
+          "SSR, сериализация и тестирование сторов",
+          "MobX против Redux, реактивности Vue и сигналов: выбор и миграции"
+        ],
+        "quizCount": 12
+      }
+    ]
   }
 ]
