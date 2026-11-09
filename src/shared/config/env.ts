@@ -21,7 +21,7 @@ const firebase: FirebaseConfig | null =
     : null
 
 export const env = {
-  appTitle: e.VITE_APP_TITLE ?? 'Vue Interview Prep',
+  appTitle: e.VITE_APP_TITLE ?? 'Frontend подготовка',
   apiUrl: e.VITE_API_URL ?? '/api',
   isDev: e.DEV,
   firebase,
