@@ -2,6 +2,7 @@
   "extends": "@tsconfig/node24/tsconfig.json",
   "include": [
     "vite.config.*",
+    "build/**/*",
     "vitest.config.*",
     "eslint.config.*",
     "commitlint.config.*"
