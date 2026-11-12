@@ -60,6 +60,19 @@ describe('useProgressStore', () => {
     expect(level.passedAt !== null).toBe(passed)
   })
 
+  it('считает прочитанные темы только в пределах числа тем уровня, не больше 100 %', () => {
+    const store = useProgressStore()
+    // Темы 4 и 5 были в правке из базы, потом их удалили: в прогрессе номера остались.
+    for (const index of [0, 1, 4, 5]) store.markTopicSeen('vue-middle', index)
+
+    expect(store.seenCount('vue-middle', 4)).toBe(2)
+    expect(store.topicsPercent('vue-middle', 4)).toBe(50)
+    expect(store.seenCount('vue-middle', 2)).toBe(2)
+    expect(store.topicsPercent('vue-middle', 2)).toBe(100)
+    expect(store.topicsPercent('vue-middle', 0)).toBe(0)
+    expect(store.seenCount('нет-уровня', 4)).toBe(0)
+  })
+
   it('фиксирует дату первого прохождения один раз', () => {
     const store = useProgressStore()
 

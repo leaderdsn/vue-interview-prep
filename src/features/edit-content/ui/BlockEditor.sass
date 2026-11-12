@@ -1,0 +1,127 @@
+@use "@/shared/styles" as ds
+
+.block-card
+  display: grid
+  gap: ds.$space-3
+  min-width: 0
+  padding: ds.$space-3 ds.$space-4
+  border: 1px solid var(--p-content-border-color)
+  border-radius: ds.$radius-md
+  background: var(--app-card)
+
+  &--invalid
+    border-color: var(--app-bad)
+
+  &__head
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-2
+
+  &__title
+    color: var(--app-link)
+    font-weight: 700
+
+  &__badge
+    padding: 0 ds.$space-2
+    border-radius: ds.$radius-sm
+    background: var(--app-soft)
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-xs
+
+  &__actions
+    display: flex
+    gap: ds.$space-1
+    margin-left: auto
+
+  &__body
+    display: grid
+    gap: ds.$space-4
+    min-width: 0
+
+    +ds.media(lg)
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)
+
+  &__form
+    display: grid
+    gap: ds.$space-3
+    align-content: start
+    min-width: 0
+
+  &__preview
+    min-width: 0
+    padding: ds.$space-3
+    border: 1px dashed var(--p-content-border-color)
+    border-radius: ds.$radius-md
+    background: var(--app-background)
+
+  &__hint,
+  &__warn
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-xs
+
+  &__warn
+    color: var(--app-warn)
+
+  &__item
+    display: grid
+    grid-template-columns: minmax(0, 1fr) auto
+    gap: ds.$space-1
+    align-items: end
+
+  &__add
+    justify-self: start
+
+  &__row
+    display: flex
+    flex-wrap: wrap
+    gap: ds.$space-1
+
+  &__table-wrap
+    overflow-x: auto
+
+  &__table
+    border-collapse: collapse
+
+    th,
+    td
+      min-width: 8rem
+      padding: 2px
+      vertical-align: top
+
+      &:last-child
+        min-width: 0
+
+    th :deep(.p-textarea)
+      font-weight: 600
+
+    :deep(.p-textarea)
+      width: 100%
+      font-size: ds.$font-size-sm
+
+  &__cell
+    display: flex
+    gap: 2px
+
+  &__issues
+    margin: 0
+    padding-left: ds.$space-5
+    color: var(--app-bad)
+    font-size: ds.$font-size-sm
+
+.editor-field
+  display: grid
+  gap: ds.$space-1
+  min-width: 0
+
+  > span
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-xs
+    font-weight: 600
+
+.editor-code
+  font-family: ds.$font-family-mono
+  font-size: ds.$font-size-sm
+  white-space: pre
+  overflow-x: auto

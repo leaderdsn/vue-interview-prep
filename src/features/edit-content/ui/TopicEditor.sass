@@ -1,0 +1,90 @@
+@use "@/shared/styles" as ds
+
+.topic-editor
+  display: grid
+  gap: ds.$space-4
+
+  &__state
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-2
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__head
+    display: grid
+    gap: ds.$space-3
+
+    +ds.media(md)
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)
+
+  &__field
+    display: grid
+    gap: ds.$space-1
+    min-width: 0
+
+    > span
+      color: var(--p-text-muted-color)
+      font-size: ds.$font-size-xs
+      font-weight: 600
+
+  &__select
+    width: 100%
+
+  &__hint
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+    code
+      font-family: ds.$font-family-mono
+      font-size: 0.9em
+
+  &__blocks
+    display: grid
+    gap: ds.$space-2
+    margin: 0
+    padding: 0
+    list-style: none
+
+  &__block
+    display: grid
+    gap: ds.$space-2
+
+  &__footer
+    position: sticky
+    bottom: 0
+    z-index: 1
+    display: grid
+    gap: ds.$space-2
+    padding: ds.$space-3 0
+    border-top: 1px solid var(--p-content-border-color)
+    background: var(--app-background)
+
+  &__issues
+    max-height: 8rem
+    margin: 0
+    padding-left: ds.$space-5
+    overflow-y: auto
+    color: var(--app-bad)
+    font-size: ds.$font-size-sm
+
+  &__actions
+    display: flex
+    flex-wrap: wrap
+    gap: ds.$space-2
+
+  &__topic-actions
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-2
+
+  &__confirm
+    display: inline-flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-2
+    font-size: ds.$font-size-sm

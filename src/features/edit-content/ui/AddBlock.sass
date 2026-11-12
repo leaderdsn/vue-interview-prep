@@ -1,0 +1,19 @@
+@use "@/shared/styles" as ds
+
+.add-block
+  display: flex
+
+  &--compact
+    opacity: 0.6
+
+    &:hover,
+    &:focus-within
+      opacity: 1
+
+  &__menu
+    display: flex
+    flex-wrap: wrap
+    gap: ds.$space-1
+    padding: ds.$space-2
+    border: 1px dashed var(--p-content-border-color)
+    border-radius: ds.$radius-md

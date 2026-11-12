@@ -28,7 +28,7 @@ function store(payload: Persisted) {
   try {
     localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(payload))
   } catch {
-    // Storage may be unavailable (private mode) — progress still lives for the session.
+    // Хранилище может быть недоступно (приватный режим) — прогресс всё равно живёт в рамках сессии.
   }
 }
 
@@ -49,6 +49,19 @@ export const useProgressStore = defineStore('progress', () => {
 
   function ensureLevel(levelId: string): LevelProgress {
     return (levels.value[levelId] ??= createEmptyLevel())
+  }
+
+  /**
+   * Сколько из `topicCount` тем уровня прочитано. Номера тем не меньше `topicCount` не считаются: тему могли удалить
+   * правкой из админки, а на главной число тем берётся из индекса. Поэтому прогресс не превышает 100 %.
+   */
+  function seenCount(levelId: string, topicCount: number): number {
+    return getLevel(levelId).seenTopics.filter((index) => index < topicCount).length
+  }
+
+  /** Доля прочитанных тем уровня в процентах (0–100). */
+  function topicsPercent(levelId: string, topicCount: number): number {
+    return topicCount > 0 ? Math.round((seenCount(levelId, topicCount) / topicCount) * 100) : 0
   }
 
   function markTopicSeen(levelId: string, topicIndex: number) {
@@ -79,7 +92,7 @@ export const useProgressStore = defineStore('progress', () => {
     lastVisited.value = null
   }
 
-  /** Detached copy, safe to send over the network or compare. */
+  /** Отвязанная копия, которую безопасно отправлять по сети или сравнивать. */
   function snapshot(): ProgressSnapshot {
     return structuredClone({ levels: toRaw(levels.value), lastVisited: toRaw(lastVisited.value) })
   }
@@ -119,6 +132,8 @@ export const useProgressStore = defineStore('progress', () => {
     levels,
     lastVisited,
     getLevel,
+    seenCount,
+    topicsPercent,
     markTopicSeen,
     recordQuizResult,
     setLastVisited,

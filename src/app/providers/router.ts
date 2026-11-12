@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import { findLevel } from '@/entities/track'
+import { findLevel, MAX_TOPICS } from '@/entities/track'
 import { QUIZ_STEP, ROUTE_NAMES } from '@/shared/config'
 
 import type { RouteLocationNormalized, RouteLocationRaw, RouteRecordRaw } from 'vue-router'
@@ -9,8 +9,12 @@ function notFound(to: RouteLocationNormalized): RouteLocationRaw {
   return { name: ROUTE_NAMES.notFound, params: { pathMatch: to.path.slice(1).split('/') }, replace: true }
 }
 
-/** Unknown level or step -> not found; missing step -> first topic. */
-function guardLevel(to: RouteLocationNormalized): boolean | RouteLocationRaw {
+/**
+ * Неизвестный уровень или шаг -> not found; шаг не указан -> первая тема.
+ * Номер темы проверяется по `MAX_TOPICS`, а не по индексу: администратор может добавить темы правкой в базе,
+ * и их число известно только после загрузки уровня. Темы, которой нет, LevelPage показывает как «Тема не найдена».
+ */
+export function guardLevel(to: RouteLocationNormalized): boolean | RouteLocationRaw {
   const found = findLevel(String(to.params.levelId))
   if (!found) return notFound(to)
 
@@ -19,7 +23,7 @@ function guardLevel(to: RouteLocationNormalized): boolean | RouteLocationRaw {
   if (step === QUIZ_STEP) return true
 
   const index = Number(step)
-  return Number.isInteger(index) && index >= 1 && index <= found.level.topicTitles.length ? true : notFound(to)
+  return Number.isInteger(index) && index >= 1 && index <= MAX_TOPICS ? true : notFound(to)
 }
 
 const routes: RouteRecordRaw[] = [
@@ -34,6 +38,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/level').then((m) => m.LevelPage),
     props: true,
     beforeEnter: guardLevel,
+  },
+  {
+    path: '/admin',
+    name: ROUTE_NAMES.admin,
+    component: () => import('@/pages/admin').then((m) => m.AdminPage),
+    meta: { title: 'Админка' },
   },
   {
     path: '/:pathMatch(.*)*',

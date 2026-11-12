@@ -1,0 +1,53 @@
+@use "@/shared/styles" as ds
+
+.quiz-editor
+  display: grid
+  gap: ds.$space-4
+
+  &__state
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-2
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__list
+    display: grid
+    gap: ds.$space-4
+
+    > .p-button
+      justify-self: start
+
+  &__footer
+    position: sticky
+    bottom: 0
+    display: grid
+    gap: ds.$space-2
+    padding: ds.$space-3 0
+    border-top: 1px solid var(--p-content-border-color)
+    background: var(--app-background)
+
+  &__issues
+    max-height: 8rem
+    margin: 0
+    padding-left: ds.$space-5
+    overflow-y: auto
+    color: var(--app-bad)
+    font-size: ds.$font-size-sm
+
+  &__hint
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__actions
+    display: flex
+    flex-wrap: wrap
+    gap: ds.$space-2
+
+  // Вопрос, к которому перешли из замечания пользователя.
+  &__focused
+    outline: 2px solid var(--app-warn)
+    outline-offset: 2px

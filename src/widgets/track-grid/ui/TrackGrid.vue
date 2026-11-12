@@ -11,6 +11,7 @@ const { tracks = TRACKS } = defineProps<{ tracks?: readonly Track[] }>()
 
 const progress = useProgressStore()
 
+// Число тем — из индекса направлений, без правок из базы (они грузятся только вместе с уровнем).
 const TONE_ICONS = { good: 'pi pi-check', bad: 'pi pi-times', neutral: 'pi pi-minus' } as const
 </script>
 
@@ -31,7 +32,7 @@ const TONE_ICONS = { good: 'pi pi-check', bad: 'pi pi-times', neutral: 'pi pi-mi
             <span class="level-link__description">{{ level.description }}</span>
             <span class="level-link__status">
               <span class="level-link__topics">
-                {{ progress.getLevel(level.id).seenTopics.length }}/{{ level.topicTitles.length }}
+                {{ progress.seenCount(level.id, level.topicTitles.length) }}/{{ level.topicTitles.length }}
                 <span class="level-link__unit">тем</span>
               </span>
               <span
