@@ -1,0 +1,29 @@
+@use "@/shared/styles" as ds
+
+// Ненавязчивая плашка внизу экрана: не перекрывает контент целиком и не блокирует страницу.
+.consent-banner
+  position: fixed
+  right: ds.$space-4
+  bottom: ds.$space-4
+  left: ds.$space-4
+  z-index: 10
+  display: flex
+  flex-wrap: wrap
+  align-items: center
+  gap: ds.$space-3 ds.$space-4
+  max-width: 44rem
+  margin-inline: auto
+  padding: ds.$space-4
+  border: 1px solid var(--p-content-border-color)
+  border-radius: ds.$radius-lg
+  background: var(--app-card)
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%)
+
+  &__text
+    flex: 1 1 20rem
+    margin: 0
+    font-size: ds.$font-size-sm
+
+  &__actions
+    display: flex
+    gap: ds.$space-2
