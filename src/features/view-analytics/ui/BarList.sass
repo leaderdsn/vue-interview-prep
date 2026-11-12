@@ -1,0 +1,65 @@
+@use "@/shared/styles" as ds
+
+// Фиксированная раскладка: длинное название обрезается многоточием, а не растягивает таблицу за пределы колонки.
+.bar-list
+  width: 100%
+  table-layout: fixed
+  border-collapse: collapse
+  font-size: ds.$font-size-sm
+
+  &__row
+    border-radius: ds.$radius-sm
+
+    &:hover
+      background: var(--app-soft)
+
+    + .bar-list__row th,
+    + .bar-list__row td
+      padding-top: ds.$space-2
+
+  &__label
+    padding: 0 ds.$space-3 0 0
+    font-weight: 400
+    text-align: left
+
+  &__name
+    display: block
+    overflow: hidden
+    white-space: nowrap
+    text-overflow: ellipsis
+
+  // Тонкая полоса с круглым концом у значения; начало прижато к нулю.
+  &__track
+    display: block
+    height: 6px
+    margin-top: ds.$space-1
+
+  &__bar
+    display: block
+    height: 100%
+    min-width: 2px
+    border-radius: 0 3px 3px 0
+    background: var(--app-chart)
+
+  &__value,
+  &__share
+    padding-left: ds.$space-2
+    text-align: right
+    vertical-align: top
+    white-space: nowrap
+    font-variant-numeric: tabular-nums
+
+  &__share
+    color: var(--p-text-muted-color)
+
+  &__empty
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  // Ширины числовых колонок задаются в <colgroup>; название получает всё остальное.
+  &__col-value
+    width: 4.5rem
+
+  &__col-share
+    width: 3.5rem

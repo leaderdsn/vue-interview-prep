@@ -1,0 +1,167 @@
+@use "@/shared/styles" as ds
+
+.report
+  display: grid
+  gap: ds.$space-4
+
+  h3
+    margin: 0
+    font-size: ds.$font-size-md
+    font-weight: 600
+
+  &__connect
+    display: grid
+    gap: ds.$space-3
+    justify-items: start
+    padding: ds.$space-5
+    border: 1px solid var(--p-content-border-color)
+    border-radius: ds.$radius-lg
+    background: var(--app-card)
+
+    p
+      max-width: 40rem
+      margin: 0
+
+  &__toolbar
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-2 ds.$space-3
+
+  &__spacer
+    flex: 1
+
+  &__note
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__link
+    display: inline-flex
+    align-items: center
+    gap: ds.$space-1
+    color: var(--app-link)
+    font-size: ds.$font-size-sm
+
+  &__loading
+    display: grid
+    gap: ds.$space-3
+
+  &__tiles
+    display: grid
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr))
+    gap: ds.$space-3
+    margin: 0
+    padding: 0
+    list-style: none
+
+  &__tile
+    display: grid
+    gap: ds.$space-1
+    padding: ds.$space-4
+    border: 1px solid var(--p-content-border-color)
+    border-radius: ds.$radius-lg
+    background: var(--app-card)
+
+  &__tile-label,
+  &__tile-delta
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__tile-value
+    font-size: ds.$font-size-xl
+    font-weight: 600
+    font-variant-numeric: tabular-nums
+
+  &__grid
+    display: grid
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr))
+    gap: ds.$space-4
+
+  &__card
+    display: grid
+    align-content: start
+    gap: ds.$space-3
+    min-width: 0
+    padding: ds.$space-4
+    border: 1px solid var(--p-content-border-color)
+    border-radius: ds.$radius-lg
+    background: var(--app-card)
+
+  &__card-head
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    justify-content: space-between
+    gap: ds.$space-2
+
+  &__table
+    font-size: ds.$font-size-sm
+
+    summary
+      color: var(--app-link)
+      cursor: pointer
+
+    table
+      width: 100%
+      margin-top: ds.$space-2
+      border-collapse: collapse
+      font-variant-numeric: tabular-nums
+
+    th,
+    td
+      padding: ds.$space-1 ds.$space-2
+      border-bottom: 1px solid var(--p-content-border-color)
+      text-align: right
+
+    th:first-child
+      text-align: left
+      font-weight: 400
+
+  &__live
+    display: flex
+    align-items: baseline
+    gap: ds.$space-2
+    margin: 0
+    color: var(--p-text-muted-color)
+
+  &__live-value
+    color: var(--p-text-color)
+    font-size: ds.$font-size-2xl
+    font-weight: 600
+    font-variant-numeric: tabular-nums
+
+  // Колонки сетки не должны раздвигаться содержимым шире своей доли.
+  &__grid > *
+    min-width: 0
+
+  &__subhead
+    margin: 0 0 ds.$space-2
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+    font-weight: 500
+
+  &__hint-title
+    margin: 0 0 ds.$space-1
+
+  &__hint-list
+    margin: 0
+    padding-left: ds.$space-5
+
+  &__events
+    display: grid
+    gap: ds.$space-2
+    margin: 0
+
+    div
+      display: flex
+      justify-content: space-between
+      gap: ds.$space-3
+
+    dt
+      color: var(--p-text-muted-color)
+
+    dd
+      margin: 0
+      font-weight: 600
+      font-variant-numeric: tabular-nums

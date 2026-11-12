@@ -1,4 +1,4 @@
-// Global styles. Unlayered styles (scoped component styles) always win over layered ones.
+// Глобальные стили. Стили вне слоёв (scoped-стили компонентов) всегда побеждают стили в слоях.
 @layer reset, primevue, app
 
 @layer reset
@@ -35,6 +35,8 @@
     --app-bad-soft: #fbe8e6
     --app-warn: #8a5300
     --app-warn-soft: #fff0d9
+    // Цвет данных на графиках статистики (проверен на контраст и светлоту для своего фона).
+    --app-chart: #059669
     --app-code-bg: #1a2233
     --app-code-fg: #e3e8f2
     --app-code-dim: #98a3b8
@@ -52,6 +54,7 @@
     --app-bad-soft: #3a1a18
     --app-warn: #f2b054
     --app-warn-soft: #33270f
+    --app-chart: #0fa776
     --app-code-bg: #0b1018
     --app-code-dim: #8e99ae
     --app-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 4px 16px rgb(0 0 0 / 25%)
@@ -80,9 +83,13 @@
   code
     font-family: ds.$font-family-mono
 
-  // PrimeVue buttons rendered as links (as="a")
+  // Кнопки PrimeVue, отрисованные как ссылки (as="a")
   a.p-button
     text-decoration: none
 
   .content
     +ds.content
+
+  // Текст только для экранных дикторов; общий класс для всех компонентов.
+  .visually-hidden
+    +ds.visually-hidden

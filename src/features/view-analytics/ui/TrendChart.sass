@@ -1,0 +1,64 @@
+@use "@/shared/styles" as ds
+
+.trend
+  position: relative
+  width: 100%
+
+  &__svg
+    display: block
+    max-width: none
+    overflow: visible
+    touch-action: pan-y
+
+    &:focus-visible
+      outline: 2px solid var(--p-primary-color)
+      outline-offset: 4px
+      border-radius: ds.$radius-sm
+
+  // Сетка и оси приглушены: главное на графике — сама линия.
+  &__grid
+    line
+      stroke: var(--p-content-border-color)
+      stroke-width: 1
+
+    text
+      fill: var(--p-text-muted-color)
+      font-size: 11px
+
+  &__line
+    fill: none
+    stroke: var(--app-chart)
+    stroke-width: 2
+    stroke-linejoin: round
+    stroke-linecap: round
+
+  &__area
+    fill: var(--app-chart)
+    opacity: 0.12
+
+  &__crosshair
+    stroke: var(--p-text-muted-color)
+    stroke-width: 1
+    stroke-dasharray: 3 3
+
+  // Кольцо цвета фона отделяет точку от линии.
+  &__dot
+    fill: var(--app-chart)
+    stroke: var(--app-card)
+    stroke-width: 2
+
+  &__tooltip
+    position: absolute
+    top: 0
+    width: 170px
+    padding: ds.$space-2 ds.$space-3
+    border: 1px solid var(--p-content-border-color)
+    border-radius: ds.$radius-sm
+    background: var(--app-card)
+    box-shadow: var(--app-shadow)
+    font-size: ds.$font-size-sm
+    pointer-events: none
+
+  &__tooltip-date
+    display: block
+    color: var(--p-text-muted-color)
