@@ -1,13 +1,44 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import { useProgressStore } from '@/entities/progress'
-import { findLevel, LEVEL_LABELS, TRACKS } from '@/entities/track'
+import { findLevel, LEVEL_LABELS, TRACK_CATEGORIES, TRACKS } from '@/entities/track'
 import { ManageProgress } from '@/features/manage-progress'
 import { ROUTE_NAMES } from '@/shared/config'
 import { TrackGrid } from '@/widgets/track-grid'
 
+import type { TrackCategory } from '@/entities/track'
+
 const progress = useProgressStore()
+const route = useRoute()
+const router = useRouter()
+
+type CategoryFilter = TrackCategory | 'all'
+
+const filterOptions: { value: CategoryFilter; label: string }[] = [
+  { value: 'all', label: 'Все' },
+  ...TRACK_CATEGORIES.map((category) => ({ value: category.id, label: category.label })),
+]
+
+// Выбранная категория хранится в адресе (?category=react), чтобы ссылкой можно было поделиться.
+const category = computed<CategoryFilter>({
+  get: () => {
+    const value = route.query.category
+    return filterOptions.some((option) => option.value === value) ? (value as CategoryFilter) : 'all'
+  },
+  set: (value) => {
+    void router.replace({ query: value === 'all' ? {} : { category: value } })
+  },
+})
+
+/** Группы для показа: при «Все» — каждая категория со своим заголовком, иначе одна выбранная. */
+const groups = computed(() =>
+  TRACK_CATEGORIES.filter((item) => category.value === 'all' || item.id === category.value).map((item) => ({
+    ...item,
+    tracks: TRACKS.filter((track) => track.category === item.id),
+  })),
+)
 
 // Главная считает темы по индексу направлений (tracks.json, tracks-extra.json), а не по правкам из базы:
 // иначе пришлось бы загружать правки всех уровней. Новые темы появляются здесь, когда индекс закоммичен.
@@ -51,7 +82,30 @@ const resume = computed(() => {
       </div>
     </section>
 
-    <TrackGrid />
+    <section class="home-page__tracks" aria-labelledby="tracks-title">
+      <div class="home-page__tracks-head">
+        <h2 id="tracks-title" class="home-page__subtitle">Направления</h2>
+        <SelectButton
+          v-model="category"
+          :options="filterOptions"
+          option-label="label"
+          option-value="value"
+          :allow-empty="false"
+          aria-label="Категория направлений"
+        />
+      </div>
+
+      <section
+        v-for="group in groups"
+        :key="group.id"
+        class="home-page__category"
+        :aria-labelledby="`category-${group.id}`"
+      >
+        <h3 :id="`category-${group.id}`" class="home-page__category-title">{{ group.label }}</h3>
+        <TrackGrid v-if="group.tracks.length" :tracks="group.tracks" />
+        <p v-else class="home-page__hint">Направления готовятся.</p>
+      </section>
+    </section>
 
     <section class="home-page__manage" aria-labelledby="manage-title">
       <h2 id="manage-title" class="home-page__subtitle">Мой прогресс</h2>

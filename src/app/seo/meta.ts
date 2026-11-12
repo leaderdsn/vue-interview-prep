@@ -13,6 +13,8 @@ export type SeoTrack = {
   id: string
   title: string
   description: string
+  /** Категория главной: vue, react, angular, general. */
+  category?: string
   levels: SeoLevel[]
 }
 

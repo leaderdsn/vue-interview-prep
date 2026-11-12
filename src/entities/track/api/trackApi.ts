@@ -5,7 +5,7 @@ import { fetchPublicData } from '@/shared/lib'
 
 import { applyOverride, contentPath, parseOverride } from './overrides'
 
-import type { Level, LevelName, LevelSummary, Track } from '../model/types'
+import type { Level, LevelName, LevelSummary, Track, TrackCategory } from '../model/types'
 
 /** Файл индекса направлений в `data/`: для кнопки «Скачать индекс направлений» в редакторе. */
 export type TrackIndexFile = {
@@ -28,6 +28,14 @@ export const TRACKS = TRACK_INDEX_FILES.flatMap((file) => file.tracks)
 export function findIndexFile(levelId: string): TrackIndexFile | null {
   return TRACK_INDEX_FILES.find((file) => file.tracks.some((track) => track.levels.some((level) => level.id === levelId))) ?? null
 }
+
+/** Категории главной в порядке показа. */
+export const TRACK_CATEGORIES: readonly { id: TrackCategory; label: string }[] = [
+  { id: 'vue', label: 'Vue' },
+  { id: 'react', label: 'React' },
+  { id: 'angular', label: 'Angular' },
+  { id: 'general', label: 'Общее' },
+]
 
 export const LEVEL_LABELS: Readonly<Record<LevelName, string>> = {
   junior: 'Junior',

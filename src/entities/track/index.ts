@@ -6,6 +6,7 @@ export {
   findIndexFile,
   findLevel,
   LEVEL_LABELS,
+  TRACK_CATEGORIES,
   TRACK_INDEX_FILES,
   TRACKS,
 } from './api/trackApi'
@@ -20,4 +21,4 @@ export {
   quizIssues,
   topicsIssues,
 } from './lib/validate'
-export type { Level, LevelName, LevelSummary, QuestionType, QuizQuestion, Topic, Track } from './model/types'
+export type { Level, LevelName, LevelSummary, QuestionType, QuizQuestion, Topic, Track, TrackCategory } from './model/types'

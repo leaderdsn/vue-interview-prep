@@ -43,9 +43,13 @@ export type LevelSummary = {
   quizCount: number
 }
 
+/** Раздел главной страницы, к которому относится направление. */
+export type TrackCategory = 'vue' | 'react' | 'angular' | 'general'
+
 export type Track = {
   id: string
   title: string
   description: string
+  category: TrackCategory
   levels: LevelSummary[]
 }

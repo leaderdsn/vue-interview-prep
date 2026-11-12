@@ -3,6 +3,7 @@
     "id": "js",
     "title": "JavaScript",
     "description": "Язык целиком: типы и замыкания, this и прототипы, event loop и промисы, память, Proxy и live-coding",
+    "category": "general",
     "levels": [
       {
         "id": "js-junior",
@@ -46,6 +47,7 @@
     "id": "ts",
     "title": "TypeScript",
     "description": "Система типов от базовых типов до conditional и mapped types, TypeScript во Vue 3 и настройка проекта",
+    "category": "general",
     "levels": [
       {
         "id": "ts-junior",
@@ -89,6 +91,7 @@
     "id": "vue",
     "title": "Vue 3 и Composition API",
     "description": "шаблоны, компоненты, реактивность, composables, Pinia, Router, устройство Vue изнутри, производительность и SSR",
+    "category": "vue",
     "levels": [
       {
         "id": "vue-junior",
@@ -132,6 +135,7 @@
     "id": "patterns",
     "title": "Принципы и паттерны проектирования",
     "description": "DRY, KISS, YAGNI, SOLID, классические паттерны на примерах Vue и TypeScript, DI, конечные автоматы, слои данных и рефакторинг",
+    "category": "general",
     "levels": [
       {
         "id": "patterns-junior",
@@ -175,6 +179,7 @@
     "id": "arch",
     "title": "Архитектура фронтенд-проекта",
     "description": "Структура и слои проекта, состояние и API, FSD, сквозные задачи, дизайн-система, монорепозиторий, микрофронтенды, решения в команде и продакшен",
+    "category": "general",
     "levels": [
       {
         "id": "arch-junior",
@@ -218,6 +223,7 @@
     "id": "css",
     "title": "CSS",
     "description": "Блочная модель, каскад, раскладки Flex и Grid, адаптивность, стили во Vue, контексты наложения, производительность, анимации и архитектура стилей",
+    "category": "general",
     "levels": [
       {
         "id": "css-junior",
@@ -261,6 +267,7 @@
     "id": "html",
     "title": "HTML, DOM и доступность",
     "description": "Семантика, формы, медиа, доступность, события DOM, загрузка ресурсов, SEO, Web Components",
+    "category": "general",
     "levels": [
       {
         "id": "html-junior",
@@ -304,6 +311,7 @@
     "id": "web",
     "title": "Браузер, сеть и безопасность",
     "description": "От ввода адреса до отрисовки: HTTP, запросы, хранилища, CORS, кэш, токены, реальное время, XSS/CSRF/CSP, рендеринг и скорость",
+    "category": "general",
     "levels": [
       {
         "id": "web-junior",
@@ -347,6 +355,7 @@
     "id": "tools",
     "title": "Тестирование и инструменты",
     "description": "Git, npm, линтеры, Vite, Vitest и Vue Test Utils, e2e, CI/CD, Docker и командный процесс",
+    "category": "general",
     "levels": [
       {
         "id": "tools-junior",
