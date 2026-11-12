@@ -3,8 +3,8 @@ import { createEmptyLevel, isRecord, parseLastVisited, parseLevel } from './pars
 import type { LevelProgress, ProgressSnapshot } from '../model/types'
 
 /**
- * Reads progress stored in Firebase Realtime Database. The database drops empty arrays and nulls,
- * so missing fields are restored to their empty values before validation.
+ * Читает прогресс, сохранённый в Firebase Realtime Database. База отбрасывает пустые массивы и null,
+ * поэтому перед валидацией отсутствующие поля восстанавливаются пустыми значениями.
  */
 export function parseRemoteProgress(raw: unknown): ProgressSnapshot {
   const levels: Record<string, LevelProgress> = {}
@@ -35,14 +35,14 @@ function mergeLevel(local: LevelProgress, remote: LevelProgress): LevelProgress 
   return {
     seenTopics: [...new Set([...local.seenTopics, ...remote.seenTopics])].sort((a, b) => a - b),
     bestScore: maxScore(local.bestScore, remote.bestScore),
-    // the side with more attempts has seen the latest quiz
+    // сторона с большим числом попыток видела последний тест
     lastScore: remote.attempts > local.attempts ? remote.lastScore : local.lastScore,
     attempts: Math.max(local.attempts, remote.attempts),
     passedAt: earliestDate(local.passedAt, remote.passedAt),
   }
 }
 
-/** Combines progress made on this device before sign-in with the account's progress; nothing is lost. */
+/** Объединяет прогресс, набранный на этом устройстве до входа, с прогрессом аккаунта; ничего не теряется. */
 export function mergeProgress(local: ProgressSnapshot, remote: ProgressSnapshot): ProgressSnapshot {
   const levels: Record<string, LevelProgress> = { ...remote.levels }
   for (const [id, level] of Object.entries(local.levels)) {
@@ -62,7 +62,7 @@ function sortKeys(value: unknown): unknown {
   )
 }
 
-/** Key order differs between the database and local state, so compare canonical JSON. */
+/** Порядок ключей в базе и в локальном состоянии различается, поэтому сравниваем канонический JSON. */
 export function isSameProgress(a: ProgressSnapshot, b: ProgressSnapshot): boolean {
   return JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b))
 }

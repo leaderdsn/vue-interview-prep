@@ -2,18 +2,18 @@ import type { QuizQuestion } from '@/entities/track'
 
 export type QuizItem = {
   questionIndex: number
-  /** Original option indexes in display order. */
+  /** Исходные индексы вариантов в порядке отображения. */
   optionOrder: number[]
 }
 
-/** Question index -> ORIGINAL option index. */
+/** Индекс вопроса -> ИСХОДНЫЙ индекс варианта. */
 export type QuizAnswers = Record<number, number>
 
 export type QuizResult = {
   correct: number
   total: number
   percent: number
-  /** Questions answered wrong or left unanswered. */
+  /** Вопросы с неверным ответом или без ответа. */
   wrong: number[]
   byType: Record<'theory' | 'practice', { correct: number; total: number }>
 }

@@ -22,7 +22,7 @@ function storeMode(mode: ThemeMode) {
   try {
     localStorage.setItem(THEME_STORAGE_KEY, mode)
   } catch {
-    // Storage may be unavailable (private mode) — theme still applies for the session.
+    // Хранилище может быть недоступно (приватный режим) — тема всё равно применяется в рамках сессии.
   }
 }
 
@@ -33,11 +33,11 @@ function applyTheme(theme: Theme) {
 export const useThemeStore = defineStore('theme', () => {
   const mode = ref<ThemeMode>(readStoredMode() ?? 'system')
 
-  // matchMedia is missing in some non-browser environments (e.g. jsdom).
+  // matchMedia отсутствует в некоторых небраузерных окружениях (например, jsdom).
   const darkQuery = typeof window.matchMedia === 'function' ? window.matchMedia(DARK_COLOR_SCHEME_QUERY) : null
   const systemTheme = ref<Theme>(darkQuery?.matches ? 'dark' : 'light')
 
-  // The store lives as long as the app, so the listener is never removed.
+  // Стор живёт столько же, сколько приложение, поэтому слушатель никогда не снимается.
   darkQuery?.addEventListener('change', (event) => {
     systemTheme.value = event.matches ? 'dark' : 'light'
   })

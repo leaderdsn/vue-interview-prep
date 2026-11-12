@@ -7,8 +7,8 @@
     <meta name="description" content="%VITE_APP_TITLE% — тренажёр собеседования по фронтенду" />
     <title>%VITE_APP_TITLE%</title>
     <script>
-      // Apply the dark theme before first paint to avoid a light flash.
-      // Keep in sync with src/features/toggle-theme/config/theme.ts (storage key, class name).
+      // Применяем тёмную тему до первой отрисовки, чтобы не было вспышки светлой.
+      // Синхронизировать с src/features/toggle-theme/config/theme.ts (ключ хранилища, имя класса).
       try {
         var mode = localStorage.getItem('app:theme')
         var dark = mode === 'dark' || (mode !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)

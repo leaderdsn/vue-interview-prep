@@ -1,4 +1,4 @@
-// Conventional Commits: https://www.conventionalcommits.org
+// Соглашение Conventional Commits: https://www.conventionalcommits.org
 export default {
   extends: ['@commitlint/config-conventional'],
 }

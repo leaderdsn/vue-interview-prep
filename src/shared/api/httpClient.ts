@@ -37,7 +37,7 @@ async function parseBody(response: Response): Promise<unknown> {
   return contentType.includes('application/json') ? response.json() : response.text()
 }
 
-/** Thin typed wrapper over fetch. Throws `HttpError` for non-2xx responses. */
+/** Тонкая типизированная обёртка над fetch. Бросает `HttpError` для ответов не из диапазона 2xx. */
 export function createHttpClient(baseUrl: string) {
   async function request<T>(method: string, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
     const { params, headers, ...init } = options

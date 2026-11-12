@@ -6,7 +6,7 @@ import { DARK_MODE_CLASS, THEME_STORAGE_KEY } from '../config/theme'
 
 import { useThemeStore } from './themeStore'
 
-/** Controllable `matchMedia` stub: `setDark` emulates the OS switching color scheme. */
+/** Управляемая заглушка `matchMedia`: `setDark` эмулирует смену цветовой схемы в ОС. */
 function mockSystemTheme(initialDark: boolean) {
   const listeners = new Set<(event: { matches: boolean }) => void>()
   const query = {
