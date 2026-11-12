@@ -342,5 +342,48 @@
         "quizCount": 12
       }
     ]
+  },
+  {
+    "id": "keycloak",
+    "title": "Keycloak",
+    "description": "Аутентификация во фронтенде через Keycloak: OAuth 2.0 и OpenID Connect, PKCE, keycloak-js во Vue и React, состояние авторизации в Pinia и MobX, защита маршрутов, BFF, SSR в Nuxt и Next.js",
+    "levels": [
+      {
+        "id": "keycloak-junior",
+        "level": "junior",
+        "description": "Что такое Keycloak, OAuth 2.0 и OIDC, токены, Authorization Code с PKCE, keycloak-js во Vue и React",
+        "topicTitles": [
+          "Keycloak и IAM: realm, client, пользователи, роли, SSO",
+          "OAuth 2.0 и OpenID Connect: access, ID и refresh токены, JWT",
+          "Authorization Code Flow с PKCE для SPA",
+          "keycloak-js во Vue и React: init, login, logout, токен в запросах"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "keycloak-middle",
+        "level": "middle",
+        "description": "Обновление токенов, роли и защита маршрутов, AuthStore в Pinia и MobX, сессии, выход и безопасность",
+        "topicTitles": [
+          "Обновление токенов: updateToken, check-sso, интерцептор с очередью",
+          "Роли и защита маршрутов: Vue Router, React Router, scopes",
+          "Состояние авторизации в сторе: Pinia и MobX",
+          "Сессии, выход и безопасность SPA: logout, вкладки, XSS, сторонние cookies"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "keycloak-senior",
+        "level": "senior",
+        "description": "BFF против токенов в браузере, Keycloak в Nuxt и Next.js, федерация, мультитенантность и эксплуатация",
+        "topicTitles": [
+          "Архитектура: токены в браузере или BFF",
+          "Nuxt и Keycloak: серверная сессия, middleware, nuxt-auth-utils",
+          "Next.js и Keycloak: Auth.js, middleware, Server Components",
+          "Федерация, мультитенантность и эксплуатация: brokering, organizations, темы, диагностика"
+        ],
+        "quizCount": 12
+      }
+    ]
   }
 ]
