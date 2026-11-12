@@ -32,7 +32,7 @@
     font-size: ds.$font-size-sm
     font-weight: 600
 
-  // Sync status at a glance: green — synced, grey — waiting, red — error.
+  // Статус синхронизации с первого взгляда: зелёный — синхронизировано, серый — ожидание, красный — ошибка.
   &__dot
     position: absolute
     right: -1px
@@ -48,6 +48,9 @@
 
     &--error
       background: var(--p-red-500)
+
+    &--unverified
+      background: var(--app-warn)
 
   &__name
     display: none
@@ -74,9 +77,21 @@
   &__title
     font-weight: 600
 
-  &__text
+  &__text,
+  &__or
     color: var(--p-text-muted-color)
     font-size: ds.$font-size-sm
+
+  &__warning
+    padding: ds.$space-2 ds.$space-3
+    border-radius: ds.$radius-sm
+    background: var(--app-warn-soft)
+    font-size: ds.$font-size-sm
+
+  &__actions
+    display: flex
+    flex-wrap: wrap
+    gap: ds.$space-2
 
   &__status
     font-size: ds.$font-size-sm
@@ -92,3 +107,23 @@
   &__error
     color: var(--p-red-500)
     font-size: ds.$font-size-sm
+
+  &__feedback
+    display: grid
+    gap: ds.$space-2
+
+  &__toggle
+    display: inline-flex
+    align-items: center
+    gap: ds.$space-2
+    justify-self: start
+    padding: 0
+    border: 0
+    background: none
+    color: var(--app-link)
+    font: inherit
+    font-size: ds.$font-size-sm
+    cursor: pointer
+
+    &:focus-visible
+      +ds.focus-ring

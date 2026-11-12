@@ -2,8 +2,7 @@
 import { ref } from 'vue'
 
 import { useProgressStore } from '@/entities/progress'
-
-import { downloadFile } from '../lib/downloadFile'
+import { downloadFile } from '@/shared/lib'
 
 const progress = useProgressStore()
 

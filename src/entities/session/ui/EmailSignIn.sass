@@ -1,0 +1,85 @@
+@use "@/shared/styles" as ds
+
+.email-sign-in
+  align-self: stretch
+  display: flex
+  flex-direction: column
+  gap: ds.$space-3
+
+  &__field
+    display: flex
+    flex-direction: column
+    gap: ds.$space-1
+    font-size: ds.$font-size-sm
+
+  // Поле пароля с кнопкой «показать» внутри, справа.
+  &__password
+    position: relative
+    display: block
+
+    :deep(input)
+      padding-right: 2.5rem
+
+  &__eye
+    position: absolute
+    top: 50%
+    right: ds.$space-1
+    display: inline-flex
+    align-items: center
+    justify-content: center
+    width: 2rem
+    height: 2rem
+    padding: 0
+    border: 0
+    border-radius: ds.$radius-sm
+    background: none
+    color: var(--p-text-muted-color)
+    cursor: pointer
+    transform: translateY(-50%)
+
+    &:hover
+      color: var(--p-text-color)
+
+    &:focus-visible
+      outline: 2px solid var(--p-primary-color)
+      outline-offset: 0
+
+  &__hint
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__warning
+    margin: 0
+    padding: ds.$space-2 ds.$space-3
+    border-radius: ds.$radius-sm
+    background: var(--app-warn-soft)
+    font-size: ds.$font-size-sm
+
+  &__done
+    margin: 0
+    color: var(--p-green-600)
+    font-size: ds.$font-size-sm
+
+  &__links
+    display: flex
+    flex-wrap: wrap
+    gap: ds.$space-1 ds.$space-3
+
+  // Ссылки-кнопки: действие на месте, без перехода, поэтому это button, а не a.
+  &__link
+    padding: 0
+    border: 0
+    background: none
+    color: var(--p-primary-color)
+    font: inherit
+    font-size: ds.$font-size-sm
+    cursor: pointer
+
+    &:hover
+      text-decoration: underline
+
+    &:focus-visible
+      outline: 2px solid var(--p-primary-color)
+      outline-offset: 2px
+      border-radius: ds.$radius-sm
