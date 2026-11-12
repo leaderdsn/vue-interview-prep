@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { levelIssues } from '../lib/validate'
 
-import { findIndexFile, TRACK_INDEX_FILES, TRACKS } from './trackApi'
+import { findIndexFile, TRACK_CATEGORIES, TRACK_INDEX_FILES, TRACKS } from './trackApi'
 
 import type { Level } from '../model/types'
 
@@ -20,6 +20,11 @@ describe('контент направлений', () => {
     const files = Object.keys(levels).map((path) => path.replace(/^.*\/(.+)\.json$/, '$1'))
 
     expect(files.sort()).toEqual(summaries.map(({ level }) => level.id).sort())
+  })
+
+  it('у каждого направления известная категория главной', () => {
+    const known = TRACK_CATEGORIES.map((category) => category.id)
+    for (const track of TRACKS) expect(known).toContain(track.category)
   })
 
   it.each(summaries)('$level.id совпадает с индексом и корректен', ({ track, level: summary }) => {

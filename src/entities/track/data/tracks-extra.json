@@ -3,6 +3,7 @@
     "id": "ai",
     "title": "AI для разработчика",
     "description": "Как работать с LLM и агентами в разработке: промпты и контекст, проверка AI-кода, LLM API во Vue, RAG, безопасность и внедрение в команду",
+    "category": "general",
     "levels": [
       {
         "id": "ai-junior",
@@ -46,6 +47,7 @@
     "id": "algo",
     "title": "Алгоритмы",
     "description": "Сложность, структуры данных, деревья и графы, DP и задачи с live-coding фронтенда",
+    "category": "general",
     "levels": [
       {
         "id": "algo-junior",
@@ -89,6 +91,7 @@
     "id": "ux",
     "title": "UX/UI для фронтенда",
     "description": "Как фронтендер работает с дизайном: принципы UX, макеты и состояния интерфейса, формы и обратная связь, токены и дизайн-система, метрики и эксперименты",
+    "category": "general",
     "levels": [
       {
         "id": "ux-junior",
@@ -132,6 +135,7 @@
     "id": "nuxt",
     "title": "Nuxt",
     "description": "Nuxt 4 от основ до продакшена: структура и авто-импорты, роутинг и данные, режимы рендеринга, серверная часть на Nitro, модули, производительность и деплой",
+    "category": "vue",
     "levels": [
       {
         "id": "nuxt-junior",
@@ -175,6 +179,7 @@
     "id": "git",
     "title": "Git",
     "description": "Git глубже ежедневных команд: модель данных, ветки и слияния, rebase и отмена изменений, стратегии ветвления, внутреннее устройство и командные процессы",
+    "category": "general",
     "levels": [
       {
         "id": "git-junior",
@@ -218,6 +223,7 @@
     "id": "react",
     "title": "React",
     "description": "React 19 от основ до архитектуры: компоненты и хуки, как устроен рендеринг, мемоизация и React Compiler, actions и Suspense, конкурентный режим, Server Components и производительность",
+    "category": "react",
     "levels": [
       {
         "id": "react-junior",
@@ -261,6 +267,7 @@
     "id": "next",
     "title": "Next.js",
     "description": "Next.js 16 на App Router: роутинг и layouts, Server и Client Components, получение данных, кэширование и Cache Components, Server Actions, proxy, стриминг, производительность и деплой, сравнение с Nuxt",
+    "category": "react",
     "levels": [
       {
         "id": "next-junior",
@@ -304,6 +311,7 @@
     "id": "redux",
     "title": "Redux",
     "description": "Redux и Redux Toolkit: однонаправленный поток данных, слайсы и Immer, асинхронность и селекторы, нормализация, RTK Query, middleware и архитектура большого стора",
+    "category": "react",
     "levels": [
       {
         "id": "redux-junior",
@@ -347,6 +355,7 @@
     "id": "mobx",
     "title": "MobX",
     "description": "MobX 6 и реактивное управление состоянием в React: observable, action и computed, реакции, асинхронность, архитектура сторов, MobX-State-Tree и сравнение с Redux и реактивностью Vue",
+    "category": "react",
     "levels": [
       {
         "id": "mobx-junior",
@@ -390,6 +399,7 @@
     "id": "keycloak",
     "title": "Keycloak",
     "description": "Аутентификация во фронтенде через Keycloak: OAuth 2.0 и OpenID Connect, PKCE, keycloak-js во Vue и React, состояние авторизации в Pinia и MobX, защита маршрутов, BFF, SSR в Nuxt и Next.js",
+    "category": "general",
     "levels": [
       {
         "id": "keycloak-junior",

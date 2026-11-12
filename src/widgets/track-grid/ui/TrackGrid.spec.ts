@@ -16,6 +16,7 @@ const TRACKS: Track[] = [
     id: 'vue',
     title: 'Vue',
     description: 'Фреймворк',
+    category: 'vue',
     levels: [
       { id: 'vue-junior', level: 'junior', description: 'Основы', topicTitles: TOPICS, quizCount: 12 },
       { id: 'vue-middle', level: 'middle', description: 'Глубже', topicTitles: TOPICS, quizCount: 12 },

@@ -29,6 +29,14 @@ export type PrerenderOptions = SeoContext & {
 
 const LEVEL_LABELS = { junior: 'Junior', middle: 'Middle', senior: 'Senior' } as const
 
+/** Повторяет TRACK_CATEGORIES из entities/track: при сборке алиасы приложения недоступны. */
+const CATEGORIES = [
+  { id: 'vue', label: 'Vue' },
+  { id: 'react', label: 'React' },
+  { id: 'angular', label: 'Angular' },
+  { id: 'general', label: 'Общее' },
+] as const
+
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
@@ -76,17 +84,20 @@ function buildPages(ctx: SeoContext, base: string, tracks: SeoTrack[], levels: M
   const pages: Page[] = []
 
   const home = homeMeta(ctx, tracks)
-  const trackList = tracks
-    .map((track) => {
-      const items = track.levels
-        .map(
-          (level) =>
-            `<li><a href="${href(topicPath(level.id, 1))}">${escapeHtml(levelName(track, level))}</a> — ${escapeHtml(level.description)}</li>`,
-        )
-        .join('')
-      return `<section><h2>${escapeHtml(track.title)}</h2><p>${escapeHtml(track.description)}</p><ul>${items}</ul></section>`
-    })
-    .join('')
+  const renderTrack = (track: SeoTrack) => {
+    const items = track.levels
+      .map(
+        (level) =>
+          `<li><a href="${href(topicPath(level.id, 1))}">${escapeHtml(levelName(track, level))}</a> — ${escapeHtml(level.description)}</li>`,
+      )
+      .join('')
+    return `<section><h3>${escapeHtml(track.title)}</h3><p>${escapeHtml(track.description)}</p><ul>${items}</ul></section>`
+  }
+  // Направления сгруппированы по категориям, как на главной в приложении.
+  const trackList = CATEGORIES.map(({ id, label }) => {
+    const inCategory = tracks.filter((track) => (track.category ?? 'general') === id)
+    return inCategory.length ? `<section><h2>${label}</h2>${inCategory.map(renderTrack).join('')}</section>` : ''
+  }).join('')
   pages.push({
     meta: home,
     body: `<main class="app-main"><h1>${escapeHtml(ctx.appTitle)}</h1><p>${escapeHtml(home.description)}</p>${trackList}</main>`,
