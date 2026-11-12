@@ -258,6 +258,49 @@
     ]
   },
   {
+    "id": "next",
+    "title": "Next.js",
+    "description": "Next.js 16 на App Router: роутинг и layouts, Server и Client Components, получение данных, кэширование и Cache Components, Server Actions, proxy, стриминг, производительность и деплой, сравнение с Nuxt",
+    "levels": [
+      {
+        "id": "next-junior",
+        "level": "junior",
+        "description": "Зачем Next.js, роутинг App Router, Server и Client Components, получение данных",
+        "topicTitles": [
+          "Зачем Next.js: SSR, App Router и что он даёт поверх React",
+          "Роутинг App Router: page, layout, динамические сегменты, Link",
+          "Server и Client Components: use client, границы, что где выполняется",
+          "Получение данных: fetch в Server Components, loading.tsx и error.tsx"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "next-middle",
+        "level": "middle",
+        "description": "Рендеринг и кэширование, Server Actions и мутации, Route Handlers и proxy, метаданные и ошибки",
+        "topicTitles": [
+          "Рендеринг и кэширование: статика, динамика, Cache Components и use cache",
+          "Мутации: Server Actions, формы, revalidatePath и теги",
+          "Route Handlers, proxy и переменные окружения",
+          "Метаданные, SEO и ошибки: generateMetadata, not-found, error.tsx"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "next-senior",
+        "level": "senior",
+        "description": "Стриминг и Partial Prerendering, производительность, деплой и рантаймы, архитектура и сравнение с Nuxt",
+        "topicTitles": [
+          "Стриминг, Suspense и Partial Prerendering",
+          "Производительность: next/image, next/font, бандл, Turbopack",
+          "Деплой и рантаймы: Vercel, self-hosting, standalone, Node и Edge",
+          "Архитектура и тестирование: Pages Router, миграции, Next.js против Nuxt"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
     "id": "redux",
     "title": "Redux",
     "description": "Redux и Redux Toolkit: однонаправленный поток данных, слайсы и Immer, асинхронность и селекторы, нормализация, RTK Query, middleware и архитектура большого стора",
