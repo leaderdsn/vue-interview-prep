@@ -1,0 +1,55 @@
+@use "@/shared/styles" as ds
+
+.feedback-form
+  display: grid
+  gap: ds.$space-4
+
+  &__context
+    display: grid
+    gap: ds.$space-2
+    padding: ds.$space-3
+    border-radius: ds.$radius-sm
+    background: var(--app-background)
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__where
+    display: inline-flex
+    align-items: center
+    gap: ds.$space-2
+
+  &__quote
+    margin: 0
+    padding-left: ds.$space-3
+    border-left: 3px solid var(--app-link)
+    color: var(--p-text-color)
+    overflow-wrap: anywhere
+
+  &__question
+    margin: 0
+    overflow-wrap: anywhere
+
+  &__field
+    display: grid
+    gap: ds.$space-2
+    font-size: ds.$font-size-sm
+    font-weight: 600
+
+    > :not(span)
+      font-weight: 400
+
+  &__hint
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-xs
+
+  &__issues
+    margin: 0
+    padding-left: ds.$space-5
+    color: var(--app-bad)
+    font-size: ds.$font-size-sm
+
+  &__actions
+    display: flex
+    flex-wrap: wrap
+    justify-content: flex-end
+    gap: ds.$space-2

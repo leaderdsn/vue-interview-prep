@@ -92,6 +92,20 @@ describe('QuizRunner', () => {
     expect(wrapper.emitted('review-topic')?.[0]?.[0]).toBeTypeOf('number')
   })
 
+  it('после проверки показывает действия страницы у каждого вопроса с его индексом в тесте', async () => {
+    const wrapper = mount(QuizRunner, {
+      props: { level: LEVEL },
+      slots: { 'question-actions': '<template #question-actions="{ questionIndex }"><span class="action">#{{ questionIndex }}</span></template>' },
+    })
+    expect(wrapper.find('.action').exists()).toBe(false)
+
+    await pick(wrapper, 'Первый?', 'да')
+    await pick(wrapper, 'Второй?', 'z')
+    await button(wrapper, 'Проверить').trigger('click')
+
+    expect(wrapper.findAll('.action').map((item) => item.text()).sort()).toEqual(['#0', '#1'])
+  })
+
   it('«Пройти заново» очищает ответы и результат', async () => {
     const wrapper = mountRunner()
     await pick(wrapper, 'Первый?', 'да')

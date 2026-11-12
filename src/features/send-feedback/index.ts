@@ -1,0 +1,5 @@
+export { currentPage, useFeedbackStore } from './model/feedbackStore'
+export type { FeedbackRequest } from './model/feedbackStore'
+export { default as FeedbackHost } from './ui/FeedbackHost.vue'
+export { default as FeedbackLink } from './ui/FeedbackLink.vue'
+export { default as SelectionFeedback } from './ui/SelectionFeedback.vue'

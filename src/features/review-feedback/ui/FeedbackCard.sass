@@ -1,0 +1,107 @@
+@use "@/shared/styles" as ds
+
+.feedback-card
+  display: grid
+  gap: ds.$space-3
+  min-width: 0
+  padding: ds.$space-4
+  border: 1px solid var(--p-content-border-color)
+  border-left-width: 4px
+  border-radius: ds.$radius-md
+  background: var(--app-card)
+
+  &--new
+    border-left-color: var(--app-warn)
+
+  &--in_progress
+    border-left-color: var(--app-link)
+
+  &--fixed
+    border-left-color: var(--app-good)
+
+  &--rejected
+    border-left-color: var(--p-content-border-color)
+
+  &__head
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-2 ds.$space-3
+    font-size: ds.$font-size-sm
+
+  &__kind
+    font-weight: 700
+
+  &__status
+    padding: 0 ds.$space-2
+    border-radius: ds.$radius-full
+    background: var(--app-soft)
+    font-size: ds.$font-size-xs
+    font-weight: 600
+
+  &__date
+    margin-left: auto
+    color: var(--p-text-muted-color)
+
+  &__text
+    margin: 0
+    white-space: pre-wrap
+    overflow-wrap: anywhere
+
+  &__quote
+    margin: 0
+    padding-left: ds.$space-3
+    border-left: 3px solid var(--app-link)
+    color: var(--p-text-muted-color)
+    overflow-wrap: anywhere
+
+  &__meta
+    display: grid
+    gap: ds.$space-1
+    margin: 0
+    font-size: ds.$font-size-sm
+
+    div
+      display: flex
+      flex-wrap: wrap
+      gap: ds.$space-2
+
+    dt
+      min-width: 4rem
+      color: var(--p-text-muted-color)
+
+    dd
+      flex: 1 1 12rem
+      min-width: 0
+      margin: 0
+      overflow-wrap: anywhere
+
+    a
+      color: var(--app-link)
+
+  &__actions
+    display: flex
+    flex-wrap: wrap
+    align-items: flex-end
+    gap: ds.$space-3
+
+  &__field
+    display: grid
+    gap: ds.$space-1
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-xs
+
+  &__confirm
+    display: inline-flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-2
+    font-size: ds.$font-size-sm
+
+  &__note
+    display: grid
+    gap: ds.$space-2
+    justify-items: start
+
+    .feedback-card__field
+      width: 100%
