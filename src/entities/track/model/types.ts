@@ -3,27 +3,30 @@ export type LevelName = 'junior' | 'middle' | 'senior'
 export type QuestionType = 'theory' | 'practice'
 
 export type QuizQuestion = {
-  /** Index of the topic inside the level that explains this question. */
+  /** Индекс темы внутри уровня, которая объясняет этот вопрос. */
   topic: number
   type: QuestionType
   question: string
-  /** Optional code snippet shown as plain text under the question. */
+  /** Необязательный фрагмент кода, показывается простым текстом под вопросом. */
   code?: string
   options: string[]
-  /** Index of the correct option in `options`. */
+  /** Индекс правильного варианта в `options`. */
   answer: number
   explanation: string
 }
 
 export type Topic = {
   title: string
-  /** Trusted HTML from the bundled content (see `shared/styles/_content.sass` for its classes). */
+  /**
+   * HTML темы (его классы — в `shared/styles/_content.sass`): доверенный из сборки
+   * или очищенный `sanitizeTopicHtml` из правки в базе.
+   */
   html: string
 }
 
-/** Full content of one level of a track, loaded lazily. */
+/** Полный контент одного уровня трека, загружается лениво. */
 export type Level = {
-  /** `${trackId}-${level}`, e.g. "vue-middle". */
+  /** `${trackId}-${level}`, например "vue-middle". */
   id: string
   trackId: string
   level: LevelName
@@ -31,7 +34,7 @@ export type Level = {
   quiz: QuizQuestion[]
 }
 
-/** Lightweight level info for lists and progress, bundled eagerly. */
+/** Облегчённые сведения об уровне для списков и прогресса, включаются в бандл сразу. */
 export type LevelSummary = {
   id: string
   level: LevelName

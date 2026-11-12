@@ -6,8 +6,8 @@ import pluginVue from 'eslint-plugin-vue'
 import type { Linter } from 'eslint'
 
 /**
- * Feature-Sliced Design boundaries.
- * Layers are listed top to bottom: a layer may import only from the layers below it.
+ * Границы слоёв Feature-Sliced Design.
+ * Слои перечислены сверху вниз: слой может импортировать только из слоёв ниже него.
  */
 const LAYERS = ['app', 'pages', 'widgets', 'features', 'entities', 'shared'] as const
 const SLICED_LAYERS = new Set<string>(['pages', 'widgets', 'features', 'entities'])
@@ -93,7 +93,7 @@ export default defineConfigWithVueTs(
       'vue/no-unused-refs': 'error',
       'vue/no-useless-v-bind': 'error',
       'vue/prefer-true-attribute-shorthand': 'error',
-      // Optional props get defaults via props destructuring, so explicit `withDefaults` is not required.
+      // Необязательные пропсы получают значения по умолчанию через деструктуризацию, поэтому `withDefaults` не нужен.
       'vue/require-default-prop': 'off',
       'vue/max-attributes-per-line': 'off',
       'vue/singleline-html-element-content-newline': 'off',
@@ -101,7 +101,7 @@ export default defineConfigWithVueTs(
   },
 
   {
-    // Global type declarations rely on interface merging (ImportMetaEnv).
+    // Глобальные объявления типов опираются на слияние интерфейсов (ImportMetaEnv).
     name: 'app/declarations',
     files: ['**/*.d.ts'],
     rules: {

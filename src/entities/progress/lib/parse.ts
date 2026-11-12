@@ -17,7 +17,7 @@ function parseScore(value: unknown): number | null | undefined {
   return isPercent(value) ? value : undefined
 }
 
-/** Returns a clean entry or null when the raw value is malformed. */
+/** Возвращает очищенную запись или null, если исходное значение некорректно. */
 export function parseLevel(raw: unknown): LevelProgress | null {
   if (!isRecord(raw)) return null
   const { seenTopics, bestScore, lastScore, attempts, passedAt } = raw

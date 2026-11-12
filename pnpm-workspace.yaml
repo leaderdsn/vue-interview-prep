@@ -1,11 +1,11 @@
-# pnpm settings (pnpm 11 reads them from this file, not from .npmrc).
+# Настройки pnpm (pnpm 11 читает их из этого файла, а не из .npmrc).
 
-# Dependency install scripts are blocked by default; list each one explicitly.
+# Install-скрипты зависимостей по умолчанию заблокированы; каждый указывается явно.
 allowBuilds:
-  # Prebuilt binaries come from @parcel/watcher-<platform>; building from source is not needed.
-  # Firebase install scripts only print a notice or fetch optional tooling.
+  # Готовые бинарники приходят из @parcel/watcher-<platform>; сборка из исходников не нужна.
+  # Install-скрипты Firebase лишь выводят уведомление или скачивают необязательные инструменты.
   '@firebase/util': false
   '@parcel/watcher': false
   protobufjs: false
-  # postinstall only switches between Vue 2 / Vue 3 builds; the default build already targets Vue 3.
+  # postinstall лишь переключает сборки Vue 2 / Vue 3; сборка по умолчанию уже рассчитана на Vue 3.
   vue-demi: false
