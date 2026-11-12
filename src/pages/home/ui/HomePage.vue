@@ -9,11 +9,13 @@ import { TrackGrid } from '@/widgets/track-grid'
 
 const progress = useProgressStore()
 
+// Главная считает темы по индексу направлений (tracks.json, tracks-extra.json), а не по правкам из базы:
+// иначе пришлось бы загружать правки всех уровней. Новые темы появляются здесь, когда индекс закоммичен.
 const levels = TRACKS.flatMap((track) => track.levels)
 const totalTopics = levels.reduce((sum, level) => sum + level.topicTitles.length, 0)
 
 const seenTopics = computed(() =>
-  levels.reduce((sum, level) => sum + Math.min(progress.getLevel(level.id).seenTopics.length, level.topicTitles.length), 0),
+  levels.reduce((sum, level) => sum + progress.seenCount(level.id, level.topicTitles.length), 0),
 )
 const passedLevels = computed(() => levels.filter((level) => progress.getLevel(level.id).passedAt !== null).length)
 const percent = computed(() => (totalTopics === 0 ? 0 : Math.round((seenTopics.value / totalTopics) * 100)))

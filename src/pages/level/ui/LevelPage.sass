@@ -96,5 +96,19 @@
     padding-top: ds.$space-5
     border-top: 1px solid var(--p-content-border-color)
 
-.visually-hidden
-  +ds.visually-hidden
+  &__feedback
+    margin: ds.$space-6 0 0
+    font-size: ds.$font-size-sm
+
+    &:empty
+      display: none
+
+  // Номер темы есть в адресе, но такой темы в загруженном уровне нет.
+  &__missing
+    p
+      margin: 0
+      color: var(--p-text-muted-color)
+
+  &__link
+    color: var(--p-primary-color)
+    font-weight: 600

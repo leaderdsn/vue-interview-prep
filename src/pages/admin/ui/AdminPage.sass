@@ -1,0 +1,70 @@
+@use "@/shared/styles" as ds
+
+.admin-page
+  +ds.container
+  display: grid
+  gap: ds.$space-5
+  padding-block: ds.$space-8 ds.$space-12
+
+  &__head
+    display: grid
+    gap: ds.$space-2
+
+  &__title
+    margin: 0
+    font-size: clamp(1.5rem, 3.5vw, 2.25rem)
+
+  &__lead,
+  &__hint,
+  &__account
+    margin: 0
+    color: var(--p-text-muted-color)
+
+  &__hint,
+  &__account
+    font-size: ds.$font-size-sm
+
+  &__uid
+    font-family: ds.$font-family-mono
+    overflow-wrap: anywhere
+    user-select: all
+
+  &__gate
+    display: grid
+    gap: ds.$space-3
+    justify-items: start
+    padding: ds.$space-5
+    border: 1px solid var(--p-content-border-color)
+    border-radius: ds.$radius-lg
+    background: var(--app-card)
+
+    p
+      margin: 0
+
+  &__sign-in
+    display: flex
+    flex-direction: column
+    align-items: flex-start
+    gap: ds.$space-3
+    width: min(100%, 20rem)
+
+  &__or
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__spinner
+    width: 2rem
+    height: 2rem
+
+  &__toolbar
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-3
+
+  &__select
+    min-width: min(100%, 18rem)
+
+  &__content
+    display: grid
+    gap: ds.$space-5

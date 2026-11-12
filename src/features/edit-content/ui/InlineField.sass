@@ -1,0 +1,31 @@
+@use "@/shared/styles" as ds
+
+.inline-field
+  display: grid
+  gap: ds.$space-1
+  min-width: 0
+
+  &__bar
+    display: flex
+    align-items: center
+    gap: ds.$space-1
+
+  &__label
+    margin-right: auto
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-xs
+    font-weight: 600
+
+  &__tool
+    padding-block: 0
+    font-size: ds.$font-size-xs
+
+    &--bold
+      font-weight: 700
+
+    &--code
+      font-family: ds.$font-family-mono
+
+  &__input
+    width: 100%
+    font-size: ds.$font-size-sm
