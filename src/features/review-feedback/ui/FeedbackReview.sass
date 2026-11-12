@@ -1,0 +1,19 @@
+@use "@/shared/styles" as ds
+
+.feedback-review
+  display: grid
+  gap: ds.$space-4
+
+  &__toolbar
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-3
+
+  &__empty
+    margin: 0
+    color: var(--p-text-muted-color)
+
+  &__list
+    display: grid
+    gap: ds.$space-4

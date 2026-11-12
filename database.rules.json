@@ -1,42 +1,97 @@
 {
   "rules": {
-    "households": {
-      ".read": false,
-      ".write": false,
-      "$h": {
-        ".read": "auth != null && $h.length >= 22",
-        ".write": "auth != null && $h.length >= 22"
-      }
-    },
+    ".read": false,
+    ".write": false,
     "interviewPrep": {
       ".read": false,
       ".write": false,
       "users": {
         "$uid": {
-          ".read": "auth != null && auth.uid === $uid",
-          ".write": "auth != null && auth.uid === $uid"
-        }
-      }
-    },
-    "schoolPrep": {
-      ".read": false,
-      ".write": false,
-      "users": {
-        "$uid": {
-          ".read": "auth != null && auth.uid === $uid",
-          ".write": "auth != null && auth.uid === $uid"
+          ".read": "auth != null && auth.uid === $uid && auth.token.email_verified === true",
+          ".write": "auth != null && auth.uid === $uid && auth.token.email_verified === true"
         }
       },
       "content": {
         ".read": true,
-        "$gradeId": {
-          ".write": "auth != null && root.child('schoolPrep/admins').child(auth.uid).val() === true"
+        "$levelId": {
+          ".write": "auth != null && root.child('interviewPrep/admins').child(auth.uid).val() === true"
         }
       },
       "admins": {
         "$uid": {
           ".read": "auth != null && auth.uid === $uid",
           ".write": false
+        }
+      },
+      "feedback": {
+        ".read": "auth != null && (root.child('interviewPrep/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider !== 'anonymous' && query.orderByChild === 'uid' && query.equalTo === auth.uid))",
+        ".indexOn": ["uid", "createdAt"],
+        "$id": {
+          ".write": "auth != null && ((!data.exists() && newData.exists() && newData.parent().parent().child('feedbackLimits').child(auth.uid).child('at').val() === now && newData.parent().parent().child('feedbackLimits').child(auth.uid).child('item').val() === $id) || (data.exists() && root.child('interviewPrep/admins').child(auth.uid).val() === true))",
+          ".validate": "newData.hasChildren(['kind', 'text', 'page', 'appVersion', 'createdAt', 'uid', 'status'])",
+          "kind": {
+            ".validate": "newData.isString() && newData.val().matches(/^(typo|inaccuracy|outdated|quiz|suggestion)$/)"
+          },
+          "text": {
+            ".validate": "newData.isString() && newData.val().length >= 5 && newData.val().length <= 2000"
+          },
+          "email": {
+            ".validate": "newData.isString() && newData.val().length <= 254 && newData.val().matches(/^[^@ ]+@[^@ ]+$/)"
+          },
+          "page": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 300"
+          },
+          "levelId": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 100"
+          },
+          "step": {
+            ".validate": "newData.val() === 'quiz' || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 1000)"
+          },
+          "topicTitle": {
+            ".validate": "newData.isString() && newData.val().length <= 300"
+          },
+          "questionIndex": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
+          },
+          "questionText": {
+            ".validate": "newData.isString() && newData.val().length <= 1000"
+          },
+          "quote": {
+            ".validate": "newData.isString() && newData.val().length <= 300"
+          },
+          "appVersion": {
+            ".validate": "newData.isString() && newData.val().length <= 50"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber() && (data.parent().exists() ? newData.val() === data.val() : newData.val() === now)"
+          },
+          "uid": {
+            ".validate": "newData.isString() && (data.parent().exists() ? newData.val() === data.val() : newData.val() === auth.uid)"
+          },
+          "status": {
+            ".validate": "newData.isString() && (data.parent().exists() ? newData.val().matches(/^(new|in_progress|fixed|rejected)$/) : newData.val() === 'new')"
+          },
+          "adminNote": {
+            ".validate": "data.parent().exists() && newData.isString() && newData.val().length <= 2000"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "feedbackLimits": {
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid && newData.child('at').val() === now && (!data.exists() || now - data.child('at').val() > 30000)",
+          ".validate": "newData.hasChildren(['at', 'item'])",
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "item": {
+            ".validate": "newData.isString() && newData.val().length <= 40"
+          },
+          "$other": {
+            ".validate": false
+          }
         }
       }
     }

@@ -1,0 +1,33 @@
+@use "@/shared/styles" as ds
+
+// Плавающая кнопка у выделения в теме; координаты считает floatingPosition.
+.selection-feedback
+  position: fixed
+  z-index: 20
+  display: inline-flex
+  align-items: center
+  gap: ds.$space-2
+  min-height: 2.25rem
+  padding: ds.$space-2 ds.$space-3
+  border: 1px solid var(--p-content-border-color)
+  border-radius: ds.$radius-full
+  background: var(--app-card)
+  box-shadow: var(--app-shadow)
+  color: var(--p-text-color)
+  font: inherit
+  font-size: ds.$font-size-sm
+  white-space: nowrap
+  cursor: pointer
+  // Касание не начинает новое выделение текста кнопки.
+  user-select: none
+  -webkit-tap-highlight-color: transparent
+
+  &:hover
+    border-color: var(--app-link)
+    color: var(--app-link)
+
+  &:focus-visible
+    +ds.focus-ring
+
+  .pi
+    color: var(--app-link)

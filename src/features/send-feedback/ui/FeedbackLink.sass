@@ -1,0 +1,14 @@
+@use "@/shared/styles" as ds
+
+// Простая кнопка выглядит как соседние ссылки (цвет и шрифт наследуются).
+.feedback-link
+  padding: 0
+  border: 0
+  background: none
+  color: inherit
+  font: inherit
+  text-decoration: underline
+  cursor: pointer
+
+  &:focus-visible
+    +ds.focus-ring

@@ -1,0 +1,24 @@
+@use "@/shared/styles" as ds
+
+// Живая область всегда в DOM, чтобы скринридеры прочитали появившийся текст.
+.feedback-notice
+  position: fixed
+  bottom: ds.$space-6
+  left: 50%
+  z-index: 1200
+  margin: 0
+  transform: translateX(-50%)
+  pointer-events: none
+
+  &__text
+    display: inline-flex
+    align-items: center
+    gap: ds.$space-2
+    padding: ds.$space-3 ds.$space-4
+    border-radius: ds.$radius-md
+    background: var(--app-good-soft)
+    box-shadow: var(--app-shadow)
+    color: var(--app-good)
+    font-size: ds.$font-size-sm
+    font-weight: 600
+    white-space: nowrap

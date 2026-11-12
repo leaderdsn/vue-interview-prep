@@ -2,10 +2,11 @@
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 
 import { PASS_SCORE, useProgressStore } from '@/entities/progress'
+import { trackEvent } from '@/shared/lib'
 
 import { createQuizSession, scoreQuiz } from '../model/quiz'
 
-import type { Level } from '@/entities/track'
+import type { Level, QuizQuestion } from '@/entities/track'
 
 import type { QuizAnswers, QuizResult } from '../model/quiz'
 
@@ -13,6 +14,11 @@ const { level } = defineProps<{ level: Level }>()
 
 const emit = defineEmits<{
   'review-topic': [topicIndex: number]
+}>()
+
+defineSlots<{
+  /** Дополнительные действия у вопроса после проверки; questionIndex — индекс в `level.quiz`. */
+  'question-actions'?: (props: { question: QuizQuestion; questionIndex: number }) => unknown
 }>()
 
 const TYPE_LABELS = { theory: 'Теория', practice: 'Практика' } as const
@@ -45,6 +51,7 @@ async function check() {
   }
   result.value = scoreQuiz(level.quiz, answers.value)
   progress.recordQuizResult(level.id, result.value.percent)
+  trackEvent('quiz_complete', { level_id: level.id, track_id: level.trackId, score: result.value.percent })
   await nextTick()
   resultRef.value?.focus()
 }
@@ -147,9 +154,13 @@ function isCorrect(questionIndex: number) {
 
           <div v-if="checked" class="question__explain">
             <p>{{ item.question.explanation }}</p>
-            <button type="button" class="question__review" @click="emit('review-topic', item.question.topic)">
-              Перечитать тему
-            </button>
+            <div class="question__links">
+              <button type="button" class="question__review" @click="emit('review-topic', item.question.topic)">
+                Перечитать тему
+              </button>
+              <!-- Действия страницы с вопросом после проверки, например «Ошибка в вопросе» -->
+              <slot name="question-actions" :question="item.question" :question-index="item.questionIndex" />
+            </div>
           </div>
         </template>
       </li>
