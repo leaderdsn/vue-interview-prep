@@ -26,6 +26,8 @@ export type FeedbackDraft = {
   /** Почта для ответа; пустая строка — без ответа. */
   email: string
   context: FeedbackContext
+  /** Приложенные картинки — строки data URL (до двух), уже уменьшенные и перекодированные в браузере. */
+  images?: string[]
 }
 
 /** Запись в базе: `interviewPrep/feedback/<id>`. */
@@ -39,6 +41,8 @@ export type FeedbackRecord = FeedbackContext & {
   /** Автор (в том числе анонимный аккаунт). */
   uid: string
   status: FeedbackStatus
+  /** Сколько картинок приложено (0–2); сами картинки — в `interviewPrep/feedbackImages/<id>`. */
+  imageCount?: number
   /** Заметка администратора, автору не показывается. */
   adminNote?: string
 }

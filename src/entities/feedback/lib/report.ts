@@ -1,4 +1,4 @@
-import { FEEDBACK_KINDS, FEEDBACK_LIMITS, FEEDBACK_STATUSES } from '../config/feedback'
+import { FEEDBACK_IMAGE_LIMITS, FEEDBACK_IMAGE_PREFIXES, FEEDBACK_KINDS, FEEDBACK_LIMITS, FEEDBACK_STATUSES } from '../config/feedback'
 
 import type { FeedbackContext, FeedbackDraft, FeedbackItem, FeedbackKind, FeedbackRecord, FeedbackStatus } from '../model/types'
 
@@ -34,6 +34,43 @@ export function feedbackIssues(draft: Pick<FeedbackDraft, 'kind' | 'text' | 'ema
   return issues
 }
 
+/** Строка data URL допустимого типа и размера — такую примут правила базы и можно показать в `<img src>`. */
+export function isFeedbackImage(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= FEEDBACK_IMAGE_LIMITS.maxLength &&
+    FEEDBACK_IMAGE_PREFIXES.some((prefix) => value.startsWith(prefix) && value.length > prefix.length)
+  )
+}
+
+/** Картинки для отправки: только допустимые и не больше двух. */
+export function cleanFeedbackImages(images: readonly string[] = []): string[] {
+  return images.filter(isFeedbackImage).slice(0, FEEDBACK_IMAGE_LIMITS.maxCount)
+}
+
+/**
+ * Значение узла `feedbackImages/<id>` для записи: `{ 0: dataUrl, 1: dataUrl }`; null — картинок нет.
+ * Ключи — строки, как в правилах базы.
+ */
+export function feedbackImagesValue(images: readonly string[]): Record<string, string> | null {
+  const clean = cleanFeedbackImages(images)
+  return clean.length ? Object.fromEntries(clean.map((image, index) => [String(index), image])) : null
+}
+
+/**
+ * Картинки из снимка базы. SDK отдаёт узел с ключами 0 и 1 массивом, а с одним ключом 1 — объектом,
+ * поэтому подходят оба вида. Всё, что не похоже на допустимый data URL, отбрасывается.
+ */
+export function parseFeedbackImages(raw: unknown): string[] {
+  if (typeof raw !== 'object' || raw === null) return []
+  const values = Array.isArray(raw)
+    ? (raw as unknown[])
+    : Object.entries(raw as Record<string, unknown>)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([, value]) => value)
+  return values.filter(isFeedbackImage).slice(0, FEEDBACK_IMAGE_LIMITS.maxCount)
+}
+
 /** Контекст без пустых полей и с длинами в пределах правил базы. */
 function cleanContext(context: FeedbackContext): FeedbackContext {
   const result: FeedbackContext = { page: clip(context.page || '/', FEEDBACK_LIMITS.page) }
@@ -67,6 +104,7 @@ export function buildFeedbackRecord<T>(
     createdAt,
     uid,
     status: 'new',
+    imageCount: cleanFeedbackImages(draft.images).length,
   }
 }
 
@@ -95,6 +133,9 @@ export function parseFeedbackItem(id: string, raw: unknown): FeedbackItem | null
   }
   if (value.step === 'quiz' || typeof value.step === 'number') item.step = value.step
   if (typeof value.questionIndex === 'number') item.questionIndex = value.questionIndex
+  if (typeof value.imageCount === 'number' && value.imageCount > 0) {
+    item.imageCount = Math.min(Math.floor(value.imageCount), FEEDBACK_IMAGE_LIMITS.maxCount)
+  }
   return item
 }
 

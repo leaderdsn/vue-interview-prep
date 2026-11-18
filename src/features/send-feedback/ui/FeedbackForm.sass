@@ -53,3 +53,37 @@
     flex-wrap: wrap
     justify-content: flex-end
     gap: ds.$space-2
+
+  // Над формой тащат файл: подсвечиваем зону, куда его можно бросить.
+  &--dragging
+    outline: 2px dashed var(--p-primary-color)
+    outline-offset: ds.$space-2
+    border-radius: ds.$radius-sm
+
+  &__images
+    display: flex
+    flex-wrap: wrap
+    gap: ds.$space-3
+    margin: 0
+    padding: 0
+    list-style: none
+
+  &__image
+    display: grid
+    justify-items: start
+    gap: ds.$space-1
+
+    img
+      display: block
+      width: 8rem
+      height: 6rem
+      object-fit: cover
+      border: 1px solid var(--p-content-border-color)
+      border-radius: ds.$radius-sm
+      background: var(--app-background)
+
+  &__attach
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: ds.$space-2

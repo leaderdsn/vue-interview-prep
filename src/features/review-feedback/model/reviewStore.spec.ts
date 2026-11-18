@@ -10,9 +10,9 @@ import type { FeedbackItem } from '@/entities/feedback'
 import type * as SharedLib from '@/shared/lib'
 
 type Tree = Record<string, unknown>
-const db = vi.hoisted(() => ({ root: {}, update: vi.fn(), remove: vi.fn() }))
+const db = vi.hoisted(() => ({ root: {}, update: vi.fn() }))
 
-// Вместо SDK Firebase — дерево в памяти: чтение списка, update и remove по пути.
+// Вместо SDK Firebase — дерево в памяти: чтение по пути и многопутевой update.
 vi.mock('@/shared/lib', async (importOriginal) => {
   const keys = (path: string) => path.split('/').filter(Boolean)
   const node = (path: string) => keys(path).reduce<unknown>((value, key) => (value as Tree | undefined)?.[key], db.root)
@@ -22,25 +22,22 @@ vi.mock('@/shared/lib', async (importOriginal) => {
       Promise.resolve({
         db: {},
         dbApi: {
-          ref: (_db: unknown, path: string) => path,
+          ref: (_db: unknown, path = '') => path,
           query: (path: string) => path,
           orderByChild: () => null,
           limitToLast: () => null,
           get: (path: string) => Promise.resolve({ val: () => node(path) ?? null }),
           update: (path: string, values: Tree) => {
             db.update(path, values)
-            const target = node(path) as Tree
+            // Ключи update — пути относительно `path`, как в многопутевом update SDK.
             for (const [key, value] of Object.entries(values)) {
-              if (value === null) delete target[key]
-              else target[key] = value
+              const parts = [...keys(path), ...keys(key)]
+              const last = parts.pop()!
+              const parent = node(parts.join('/')) as Tree | undefined
+              if (!parent) continue
+              if (value === null) delete parent[last]
+              else parent[last] = value
             }
-            return Promise.resolve()
-          },
-          remove: (path: string) => {
-            db.remove(path)
-            const parts = keys(path)
-            const last = parts.pop()!
-            delete (node(parts.join('/')) as Tree)[last]
             return Promise.resolve()
           },
         },
@@ -124,7 +121,7 @@ describe('useReviewStore', () => {
 
     await review.remove('old')
 
-    expect(db.remove).toHaveBeenCalledWith('interviewPrep/feedback/old')
+    expect(db.update).toHaveBeenCalledWith('', { 'interviewPrep/feedback/old': null, 'interviewPrep/feedbackImages/old': null })
     expect(review.items.map((value) => value.id)).toEqual(['fresh', 'mid'])
   })
 })
@@ -161,7 +158,7 @@ describe('FeedbackReview', () => {
     await button('Да, удалить').trigger('click')
     await flushPromises()
 
-    expect(db.remove).toHaveBeenCalledWith('interviewPrep/feedback/fresh')
+    expect(db.update).toHaveBeenCalledWith('', { 'interviewPrep/feedback/fresh': null, 'interviewPrep/feedbackImages/fresh': null })
     expect(wrapper.findAll('.feedback-card')).toHaveLength(1)
   })
 
@@ -173,5 +170,77 @@ describe('FeedbackReview', () => {
     await wrapper.findAll('button').find((value) => value.text() === 'Открыть в редакторе')!.trigger('click')
 
     expect(wrapper.emitted('open-editor')?.[0]).toEqual([{ levelId: 'vue-junior', step: 'quiz', questionIndex: 4 }])
+  })
+})
+
+describe('FeedbackCard: изображения', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgo='
+  const WEBP = 'data:image/webp;base64,UklGRhYAAABXRUJQ'
+
+  beforeEach(() => {
+    db.root = {
+      interviewPrep: {
+        feedback: { shot: record('new', 5, { imageCount: 2 }), plain: record('new', 3) },
+        // SDK отдаёт узел с ключами 0 и 1 массивом; третья строка — не картинка и должна быть отброшена.
+        feedbackImages: { shot: [PNG, WEBP, 'data:text/html;base64,PGI+'] },
+      },
+    }
+    vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }))
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+    setActivePinia(createPinia())
+  })
+
+  it('показывает миниатюры только у замечания с картинками, по клику — полный размер и «Скачать»', async () => {
+    const wrapper = mount(FeedbackReview, { attachTo: document.body })
+    await flushPromises()
+
+    const [shot, plain] = wrapper.findAll('.feedback-card')
+    const thumbs = shot!.findAll('.feedback-card__thumb img')
+    expect(thumbs.map((img) => img.attributes('src'))).toEqual([PNG, WEBP])
+    expect(plain!.find('.feedback-card__images').exists()).toBe(false)
+
+    await shot!.findAll('.feedback-card__thumb')[1]!.trigger('click')
+    await flushPromises()
+
+    const full = document.body.querySelector<HTMLImageElement>('.feedback-card__full img')
+    expect(full?.getAttribute('src')).toBe(WEBP)
+    const download = document.body.querySelector<HTMLAnchorElement>('.feedback-card__full a')
+    expect(download?.getAttribute('href')).toBe(WEBP)
+    expect(download?.getAttribute('download')).toBe('feedback-shot-2.webp')
+    expect(download?.textContent).toContain('Скачать')
+    wrapper.unmount()
+  })
+
+  it('картинки грузятся, только когда карточка показалась на экране, и один раз', async () => {
+    const observed: { callback: IntersectionObserverCallback }[] = []
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          observed.push({ callback })
+        }
+        observe() {}
+        disconnect() {}
+      },
+    )
+    const wrapper = mount(FeedbackReview)
+    await flushPromises()
+    const review = useReviewStore()
+
+    expect(observed).toHaveLength(1)
+    expect(review.images.shot).toBeUndefined()
+    expect(wrapper.text()).toContain('Изображения: 2')
+
+    observed[0]!.callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+    await flushPromises()
+
+    expect(review.images.shot).toEqual([PNG, WEBP])
+    expect(wrapper.findAll('.feedback-card__thumb')).toHaveLength(2)
+    await review.loadImages('shot')
+    expect(review.images.shot).toEqual([PNG, WEBP])
   })
 })

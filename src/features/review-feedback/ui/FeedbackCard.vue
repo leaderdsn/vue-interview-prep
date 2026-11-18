@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 
 import { describeContext, FEEDBACK_KIND_LABELS, FEEDBACK_LIMITS, FEEDBACK_STATUS_LABELS, FEEDBACK_STATUSES } from '@/entities/feedback'
 
@@ -25,6 +25,46 @@ watch(
   (value) => (note.value = value ?? ''),
 )
 const noteChanged = computed(() => note.value.trim() !== (item.adminNote ?? ''))
+
+const imageCount = computed(() => item.imageCount ?? 0)
+const images = computed(() => review.images[item.id] ?? [])
+const imagesLoading = computed(() => review.imagesLoading[item.id] === true)
+/** Номер картинки, открытой в полном размере; null — просмотр закрыт. */
+const preview = ref<number | null>(null)
+const previewVisible = computed({
+  get: () => preview.value !== null,
+  set: (value) => {
+    if (!value) preview.value = null
+  },
+})
+const previewUrl = computed(() => (preview.value === null ? '' : (images.value[preview.value] ?? '')))
+
+/** Имя файла для «Скачать»: расширение по типу из data URL. */
+function fileName(url: string, index: number) {
+  const type = /^data:image\/(webp|png|jpeg);/.exec(url)?.[1] ?? 'png'
+  return `feedback-${item.id}-${index + 1}.${type === 'jpeg' ? 'jpg' : type}`
+}
+
+// Картинки весят сотни килобайт: грузим их, только когда карточка показалась на экране.
+const root = useTemplateRef<HTMLElement>('root')
+let observer: IntersectionObserver | null = null
+
+onMounted(() => {
+  if (!imageCount.value) return
+  if (typeof IntersectionObserver !== 'function' || !root.value) {
+    void review.loadImages(item.id)
+    return
+  }
+  observer = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return
+    observer?.disconnect()
+    observer = null
+    void review.loadImages(item.id)
+  })
+  observer.observe(root.value)
+})
+
+onBeforeUnmount(() => observer?.disconnect())
 
 const confirming = ref(false)
 const busy = ref(false)
@@ -64,7 +104,7 @@ function remove() {
 </script>
 
 <template>
-  <article class="feedback-card" :class="`feedback-card--${item.status}`" :aria-busy="busy">
+  <article ref="root" class="feedback-card" :class="`feedback-card--${item.status}`" :aria-busy="busy">
     <header class="feedback-card__head">
       <span class="feedback-card__kind">{{ FEEDBACK_KIND_LABELS[item.kind] }}</span>
       <span class="feedback-card__status">{{ FEEDBACK_STATUS_LABELS[item.status] }}</span>
@@ -73,6 +113,20 @@ function remove() {
 
     <p class="feedback-card__text">{{ item.text }}</p>
     <blockquote v-if="item.quote" class="feedback-card__quote">{{ item.quote }}</blockquote>
+
+    <section v-if="imageCount" class="feedback-card__images" aria-label="Изображения">
+      <p v-if="imagesLoading && !images.length" class="feedback-card__images-note" role="status">
+        Загружаем изображения ({{ imageCount }})…
+      </p>
+      <p v-else-if="!images.length" class="feedback-card__images-note">Изображения: {{ imageCount }}</p>
+      <ul v-else class="feedback-card__thumbs">
+        <li v-for="(url, index) in images" :key="index">
+          <button type="button" class="feedback-card__thumb" :aria-label="`Открыть изображение ${index + 1}`" @click="preview = index">
+            <img :src="url" :alt="`Изображение ${index + 1}`">
+          </button>
+        </li>
+      </ul>
+    </section>
 
     <dl class="feedback-card__meta">
       <div>
@@ -140,6 +194,24 @@ function remove() {
         @click="saveNote"
       />
     </div>
+
+    <Dialog
+      v-model:visible="previewVisible"
+      modal
+      dismissable-mask
+      :draggable="false"
+      :header="preview === null ? '' : `Изображение ${preview + 1}`"
+      :style="{ width: 'min(64rem, calc(100vw - 2rem))' }"
+    >
+      <figure v-if="previewUrl" class="feedback-card__full">
+        <img :src="previewUrl" :alt="`Изображение ${(preview ?? 0) + 1} в полном размере`">
+        <figcaption>
+          <a :href="previewUrl" :download="fileName(previewUrl, preview ?? 0)">
+            <i class="pi pi-download" aria-hidden="true" /> Скачать
+          </a>
+        </figcaption>
+      </figure>
+    </Dialog>
   </article>
 </template>
 

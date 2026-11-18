@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 
 import {
   describeContext,
+  FEEDBACK_IMAGE_LIMITS,
   FEEDBACK_INTERVAL_MS,
   FEEDBACK_KIND_LABELS,
   FEEDBACK_KINDS,
@@ -16,11 +17,30 @@ import { useSessionStore } from '@/entities/session'
 import { trackEvent } from '@/shared/lib'
 
 import { useFeedbackStore } from '../model/feedbackStore'
+import { useImageAttachments } from '../model/imageAttachments'
 
 import type { FeedbackKind } from '@/entities/feedback'
 
 const feedback = useFeedbackStore()
 const session = useSessionStore()
+
+// Картинки: вставка из буфера, перетаскивание и выбор файла; сжатие — в браузере.
+const {
+  images,
+  urls: imageUrls,
+  processing: imagesProcessing,
+  error: imageError,
+  dragging,
+  full: imagesFull,
+  add: addImages,
+  remove: removeImage,
+  reset: resetImages,
+  onPaste,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+} = useImageAttachments()
+const fileInput = ref<HTMLInputElement | null>(null)
 
 const kindOptions = FEEDBACK_KINDS.map((value) => ({ value, label: FEEDBACK_KIND_LABELS[value] }))
 
@@ -47,6 +67,7 @@ watch(
     email.value = session.user?.email ?? ''
     error.value = null
     attempted.value = false
+    resetImages()
   },
   { immediate: true },
 )
@@ -54,7 +75,7 @@ watch(
 async function submit() {
   attempted.value = true
   error.value = null
-  if (issues.value.length || busy.value || !feedback.request) return
+  if (issues.value.length || busy.value || imagesProcessing.value || !feedback.request) return
   if (feedback.lastSentAt !== null && Date.now() - feedback.lastSentAt < FEEDBACK_INTERVAL_MS) {
     error.value = feedbackError('too-frequent').message
     return
@@ -62,7 +83,10 @@ async function submit() {
   busy.value = true
   try {
     const uid = await session.ensureUid()
-    await sendFeedback({ kind: kind.value, text: text.value, email: email.value, context: context.value }, uid)
+    await sendFeedback(
+      { kind: kind.value, text: text.value, email: email.value, context: context.value, images: imageUrls.value },
+      uid,
+    )
     trackEvent('feedback_sent', { kind: kind.value })
     feedback.markSent()
   } catch (cause) {
@@ -70,6 +94,14 @@ async function submit() {
   } finally {
     busy.value = false
   }
+}
+
+/** Выбор файлов кнопкой; значение поля сбрасывается, чтобы тот же файл можно было выбрать снова. */
+function onFilesPicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  void addImages(files)
 }
 </script>
 
@@ -83,7 +115,16 @@ async function submit() {
     class="feedback-form-dialog"
     :style="{ width: 'min(36rem, calc(100vw - 2rem))' }"
   >
-    <form class="feedback-form" novalidate @submit.prevent="submit">
+    <form
+      class="feedback-form"
+      :class="{ 'feedback-form--dragging': dragging }"
+      novalidate
+      @submit.prevent="submit"
+      @paste="onPaste"
+      @dragover="onDragOver"
+      @dragleave="onDragLeave"
+      @drop="onDrop"
+    >
       <div class="feedback-form__context" aria-label="Где оставлено замечание">
         <span class="feedback-form__where">
           <i class="pi pi-map-marker" aria-hidden="true" />
@@ -113,6 +154,49 @@ async function submit() {
         <small class="feedback-form__hint">{{ textLength }} / {{ FEEDBACK_LIMITS.textMax }}</small>
       </label>
 
+      <div class="feedback-form__field" role="group" aria-labelledby="feedback-images-title">
+        <span id="feedback-images-title">Изображения (необязательно, до {{ FEEDBACK_IMAGE_LIMITS.maxCount }})</span>
+        <ul v-if="images.length" class="feedback-form__images">
+          <li v-for="(image, index) in images" :key="image.id" class="feedback-form__image">
+            <img :src="image.url" :alt="`Изображение ${index + 1}`">
+            <Button
+              label="Убрать"
+              icon="pi pi-times"
+              severity="secondary"
+              variant="text"
+              size="small"
+              :aria-label="`Убрать изображение ${index + 1}`"
+              @click="removeImage(image.id)"
+            />
+          </li>
+        </ul>
+        <div class="feedback-form__attach">
+          <Button
+            label="Прикрепить изображение"
+            icon="pi pi-image"
+            severity="secondary"
+            variant="outlined"
+            size="small"
+            :disabled="imagesFull"
+            :loading="imagesProcessing"
+            @click="fileInput?.click()"
+          />
+          <input
+            ref="fileInput"
+            hidden
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            @change="onFilesPicked"
+          >
+        </div>
+        <small class="feedback-form__hint">
+          Можно вставить скриншот (Ctrl+V) или перетащить файл в форму. PNG, JPEG или WebP.
+          Не прикладывайте скриншоты с личными данными
+        </small>
+        <Message v-if="imageError" severity="warn" size="small">{{ imageError }}</Message>
+      </div>
+
       <label class="feedback-form__field">
         <span>Почта для ответа (необязательно)</span>
         <InputText
@@ -132,7 +216,7 @@ async function submit() {
 
       <div class="feedback-form__actions">
         <Button label="Отмена" severity="secondary" variant="text" :disabled="busy" @click="feedback.close()" />
-        <Button type="submit" label="Отправить" icon="pi pi-send" :loading="busy" />
+        <Button type="submit" label="Отправить" icon="pi pi-send" :loading="busy" :disabled="imagesProcessing" />
       </div>
     </form>
   </Dialog>

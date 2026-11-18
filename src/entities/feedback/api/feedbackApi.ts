@@ -1,8 +1,8 @@
 import { APP_VERSION } from '@/shared/config'
 import { loadFirebase } from '@/shared/lib'
 
-import { FEEDBACK_PATH, feedbackLimitPath } from '../config/feedback'
-import { buildFeedbackRecord, parseFeedbackList } from '../lib/report'
+import { FEEDBACK_PATH, feedbackImagesPath, feedbackLimitPath } from '../config/feedback'
+import { buildFeedbackRecord, feedbackImagesValue, parseFeedbackImages, parseFeedbackList } from '../lib/report'
 
 import type { FeedbackDraft, FeedbackItem, FeedbackStatus } from '../model/types'
 
@@ -69,9 +69,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * Отправляет замечание одним многопутевым `update`: запись и отметка времени отправки в `feedbackLimits`.
- * Правила базы принимают запись, только если в том же запросе отметка равна времени сервера и прошлая
- * отметка старше 30 секунд, а в отметке указан id именно этой записи (одна запись на запрос).
+ * Отправляет замечание одним многопутевым `update`: запись, её картинки (если есть) и отметка времени
+ * отправки в `feedbackLimits`. Правила базы принимают запись, только если в том же запросе отметка равна
+ * времени сервера и прошлая отметка старше 30 секунд, а в отметке указан id именно этой записи
+ * (одна запись на запрос). Картинки принимаются только вместе с созданием записи.
  * Возвращает id новой записи.
  */
 export async function sendFeedback(draft: FeedbackDraft, uid: string): Promise<string> {
@@ -79,12 +80,15 @@ export async function sendFeedback(draft: FeedbackDraft, uid: string): Promise<s
   const id = dbApi.push(dbApi.ref(db, FEEDBACK_PATH)).key
   if (!id) throw feedbackError('unknown')
   const at = dbApi.serverTimestamp()
+  const images = feedbackImagesValue(draft.images ?? [])
   await withTimeout(
     dbApi.update(dbApi.ref(db), {
       [`${FEEDBACK_PATH}/${id}`]: buildFeedbackRecord(draft, uid, APP_VERSION, at),
+      ...(images ? { [feedbackImagesPath(id)]: images } : {}),
       [feedbackLimitPath(uid)]: { at, item: id },
     }),
-    SEND_TIMEOUT_MS,
+    // Картинки весят до сотен килобайт: на медленной сети ждём дольше.
+    images ? SEND_TIMEOUT_MS * 3 : SEND_TIMEOUT_MS,
   )
   return id
 }
@@ -114,7 +118,15 @@ export async function updateFeedback(id: string, patch: { status?: FeedbackStatu
   await dbApi.update(dbApi.ref(db, `${FEEDBACK_PATH}/${id}`), values)
 }
 
+/** Картинки замечания (data URL) для администратора или автора; грузятся отдельно от списка. */
+export async function fetchFeedbackImages(id: string): Promise<string[]> {
+  const { db, dbApi } = await loadFirebase()
+  const snap = await dbApi.get(dbApi.ref(db, feedbackImagesPath(id)))
+  return parseFeedbackImages(snap.val())
+}
+
+/** Удаляет замечание вместе с его картинками одним многопутевым `update`. */
 export async function deleteFeedback(id: string): Promise<void> {
   const { db, dbApi } = await loadFirebase()
-  await dbApi.remove(dbApi.ref(db, `${FEEDBACK_PATH}/${id}`))
+  await dbApi.update(dbApi.ref(db), { [`${FEEDBACK_PATH}/${id}`]: null, [feedbackImagesPath(id)]: null })
 }

@@ -18,6 +18,8 @@ const loading = ref(true)
 const failed = ref(false)
 
 const formatDate = (time: number) => new Date(time).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+/** «1 изображение», «2 изображения» — картинок не больше двух, сами они здесь не грузятся. */
+const imagesLabel = (count: number) => (count === 1 ? '1 изображение' : `${count} изображения`)
 const shorten = (text: string) => (text.length > 120 ? `${text.slice(0, 119).trimEnd()}…` : text)
 
 // Список грузится при каждом открытии: компонент монтируется, только когда его раскрыли.
@@ -46,7 +48,9 @@ onMounted(async () => {
           </span>
         </span>
         <span class="my-feedback__text">{{ shorten(item.text) }}</span>
-        <span class="my-feedback__where">{{ describeContext(item) }}</span>
+        <span class="my-feedback__where">
+          {{ describeContext(item) }}<template v-if="item.imageCount"> · {{ imagesLabel(item.imageCount) }}</template>
+        </span>
       </li>
     </ul>
   </div>

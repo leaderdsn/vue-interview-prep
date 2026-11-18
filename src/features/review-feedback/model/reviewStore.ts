@@ -1,7 +1,14 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
-import { deleteFeedback, FEEDBACK_STATUS_LABELS, FEEDBACK_STATUSES, fetchAllFeedback, updateFeedback } from '@/entities/feedback'
+import {
+  deleteFeedback,
+  FEEDBACK_STATUS_LABELS,
+  FEEDBACK_STATUSES,
+  fetchAllFeedback,
+  fetchFeedbackImages,
+  updateFeedback,
+} from '@/entities/feedback'
 
 import type { FeedbackItem, FeedbackStatus } from '@/entities/feedback'
 
@@ -34,13 +41,16 @@ function message(cause: unknown, fallback: string) {
   return cause instanceof Error ? `${fallback}: ${cause.message}` : fallback
 }
 
-/** Замечания пользователей в админке: список, фильтр по статусу, смена статуса, заметка, удаление. */
+/** Замечания пользователей в админке: список, фильтр по статусу, смена статуса, заметка, картинки, удаление. */
 export const useReviewStore = defineStore('review-feedback', () => {
   const items = ref<FeedbackItem[]>([])
   const filter = ref<FeedbackFilter>('new')
   const loading = ref(false)
   const loaded = ref(false)
   const error = ref<string | null>(null)
+  /** Картинки замечаний по id: грузятся отдельно, когда карточка появилась на экране. */
+  const images = ref<Record<string, string[]>>({})
+  const imagesLoading = ref<Record<string, boolean>>({})
 
   const counts = computed(() => countByStatus(items.value))
   const newCount = computed(() => counts.value.new)
@@ -94,11 +104,28 @@ export const useReviewStore = defineStore('review-feedback', () => {
     }
   }
 
+  /** Загружает картинки замечания один раз; повторные вызовы берут их из памяти. */
+  async function loadImages(id: string): Promise<void> {
+    if (images.value[id] || imagesLoading.value[id]) return
+    imagesLoading.value = { ...imagesLoading.value, [id]: true }
+    try {
+      images.value = { ...images.value, [id]: await fetchFeedbackImages(id) }
+    } catch (cause) {
+      error.value = message(cause, 'Не удалось загрузить изображения')
+    } finally {
+      imagesLoading.value = { ...imagesLoading.value, [id]: false }
+    }
+  }
+
   async function remove(id: string): Promise<boolean> {
     error.value = null
     try {
       await deleteFeedback(id)
       items.value = items.value.filter((item) => item.id !== id)
+      // Картинки удалённого замечания больше не нужны в памяти.
+      const rest = { ...images.value }
+      delete rest[id]
+      images.value = rest
       return true
     } catch (cause) {
       error.value = message(cause, 'Не удалось удалить отзыв')
@@ -106,5 +133,21 @@ export const useReviewStore = defineStore('review-feedback', () => {
     }
   }
 
-  return { items, filter, loading, loaded, error, counts, newCount, visible, load, setStatus, saveNote, remove }
+  return {
+    items,
+    filter,
+    loading,
+    loaded,
+    error,
+    images,
+    imagesLoading,
+    counts,
+    newCount,
+    visible,
+    load,
+    setStatus,
+    saveNote,
+    loadImages,
+    remove,
+  }
 })

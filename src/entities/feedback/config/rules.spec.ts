@@ -2,9 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import rulesFile from '../../../../database.rules.json'
 import { sendFeedback } from '../api/feedbackApi'
-import { buildFeedbackRecord } from '../lib/report'
+import { buildFeedbackRecord, feedbackImagesValue } from '../lib/report'
 
-import { FEEDBACK_INTERVAL_MS, FEEDBACK_PATH, feedbackLimitPath } from './feedback'
+import { FEEDBACK_IMAGE_LIMITS, FEEDBACK_INTERVAL_MS, FEEDBACK_PATH, feedbackImagesPath, feedbackLimitPath } from './feedback'
 
 import type { FeedbackDraft } from '../model/types'
 import type * as SharedLib from '@/shared/lib'
@@ -79,6 +79,10 @@ class Snapshot {
 
   parent() {
     return new Snapshot(this.tree, this.path.slice(0, -1))
+  }
+
+  hasChild(key: string) {
+    return this.child(key).exists()
   }
 
   hasChildren(keys: string[]) {
@@ -331,6 +335,125 @@ describe('database.rules.json: замечания', () => {
   })
 })
 
+const PNG = 'data:image/png;base64,iVBORw0KGgo='
+const WEBP = 'data:image/webp;base64,UklGRhYAAABXRUJQ'
+
+/** Замечание с картинками: запись, картинки и отметка частоты одним update — как в sendFeedback. */
+function withImages(id: string, uid: string, list: string[], overrides: Record<string, unknown> = {}) {
+  return {
+    [`${FEEDBACK_PATH}/${id}`]: { ...buildFeedbackRecord({ ...draft, images: list }, uid, '0.1.0', TIMESTAMP), ...overrides },
+    [feedbackImagesPath(id)]: feedbackImagesValue(list),
+    [feedbackLimitPath(uid)]: { at: TIMESTAMP, item: id },
+  }
+}
+
+const images = (db: ReturnType<typeof createDb>, id: string) => read(db.tree, split(feedbackImagesPath(id))) as Tree | null
+
+/** Картинки к ещё не созданному замечанию с подменённым значением узла картинок. */
+function attemptImages(value: unknown, imageCount = 1) {
+  const values = withImages('f1', 'a1', [PNG], { imageCount })
+  return createDb().update(anonymous('a1'), { ...values, [feedbackImagesPath('f1')]: value })
+}
+
+describe('database.rules.json: картинки замечаний', () => {
+  it('одна и две картинки записываются вместе с замечанием', () => {
+    const db = createDb()
+
+    expect(db.update(anonymous('a1'), withImages('f1', 'a1', [PNG]))).toBe(true)
+    expect(item(db, 'f1')).toMatchObject({ imageCount: 1 })
+    expect(images(db, 'f1')).toEqual({ 0: PNG })
+
+    db.advance(FEEDBACK_INTERVAL_MS + 1)
+    expect(db.update(anonymous('a1'), withImages('f2', 'a1', [PNG, WEBP]))).toBe(true)
+    expect(images(db, 'f2')).toEqual({ 0: PNG, 1: WEBP })
+  })
+
+  it('строка длиннее 400 000 символов отклоняется', () => {
+    const prefix = 'data:image/webp;base64,'
+    const big = prefix + 'A'.repeat(FEEDBACK_IMAGE_LIMITS.maxLength - prefix.length + 1)
+
+    expect(attemptImages({ 0: big })).toBe(false)
+    expect(attemptImages({ 0: big.slice(0, -1) })).toBe(true)
+  })
+
+  it('принимает только WebP, PNG и JPEG в base64', () => {
+    expect(attemptImages({ 0: 'data:image/jpeg;base64,/9j/4AAQ' })).toBe(true)
+    expect(attemptImages({ 0: 'data:image/svg+xml;base64,PHN2Zz4=' })).toBe(false)
+    expect(attemptImages({ 0: 'data:image/gif;base64,R0lGODlh' })).toBe(false)
+    expect(attemptImages({ 0: 'data:text/html;base64,PGh0bWw+' })).toBe(false)
+    expect(attemptImages({ 0: 'https://example.com/a.png' })).toBe(false)
+    expect(attemptImages({ 0: 'data:image/png;base64,' })).toBe(false)
+    expect(attemptImages({ 0: 42 })).toBe(false)
+  })
+
+  it('не больше двух картинок и только ключи 0 и 1', () => {
+    expect(attemptImages({ 0: PNG, 1: PNG, 2: PNG }, 2)).toBe(false)
+    expect(attemptImages({ 0: PNG, 1: PNG, 2: PNG }, 3)).toBe(false)
+    expect(attemptImages({ 1: PNG }, 1)).toBe(false)
+    expect(attemptImages({ x: PNG }, 1)).toBe(false)
+    expect(attemptImages({ 0: PNG, 1: PNG }, 2)).toBe(true)
+  })
+
+  it('imageCount совпадает с числом картинок', () => {
+    const db = createDb()
+
+    expect(db.update(anonymous('a1'), withImages('f1', 'a1', [PNG, WEBP], { imageCount: 1 }))).toBe(false)
+    expect(db.update(anonymous('a1'), withImages('f1', 'a1', [PNG], { imageCount: 0 }))).toBe(false)
+    expect(db.update(anonymous('a1'), submission('f1', 'a1', { imageCount: 1 }))).toBe(false)
+    expect(db.update(anonymous('a1'), submission('f1', 'a1', { imageCount: 0 }))).toBe(true)
+  })
+
+  it('картинку нельзя записать без создания замечания или к уже созданному', () => {
+    const db = createDb()
+    const limit = { [feedbackLimitPath('a1')]: { at: TIMESTAMP, item: 'f1' } }
+
+    // Без записи замечания в том же запросе.
+    expect(db.update(anonymous('a1'), { [feedbackImagesPath('f1')]: { 0: PNG } })).toBe(false)
+    expect(db.update(anonymous('a1'), { [feedbackImagesPath('f1')]: { 0: PNG }, ...limit })).toBe(false)
+    expect(images(db, 'f1')).toBeNull()
+
+    // К уже созданному замечанию — даже своему и после паузы.
+    expect(db.update(anonymous('a1'), submission('f1', 'a1'))).toBe(true)
+    db.advance(FEEDBACK_INTERVAL_MS + 1)
+    expect(db.update(anonymous('a1'), { [feedbackImagesPath('f1')]: { 0: PNG }, ...limit })).toBe(false)
+
+    // Картинки к замечанию, которого нет в отметке частоты.
+    expect(db.update(anonymous('a1'), { ...withImages('f3', 'a1', [PNG]), [feedbackImagesPath('f4')]: { 0: PNG } })).toBe(false)
+  })
+
+  it('автор не может заменить или удалить картинки, администратор удаляет их вместе с замечанием', () => {
+    const db = createDb({ interviewPrep: { admins: { boss: true } } })
+    db.update(anonymous('a1'), withImages('f1', 'a1', [PNG]))
+    db.advance(FEEDBACK_INTERVAL_MS + 1)
+
+    expect(db.update(anonymous('a1'), { [`${feedbackImagesPath('f1')}/0`]: WEBP })).toBe(false)
+    expect(db.update(anonymous('a1'), { [feedbackImagesPath('f1')]: null })).toBe(false)
+    expect(db.update(user('boss'), { [feedbackImagesPath('f1')]: { 0: WEBP } })).toBe(false)
+
+    expect(db.update(user('boss'), { [`${FEEDBACK_PATH}/f1`]: null, [feedbackImagesPath('f1')]: null })).toBe(true)
+    expect(item(db, 'f1')).toBeNull()
+    expect(images(db, 'f1')).toBeNull()
+
+    // Замечание без картинок удаляется тем же запросом.
+    db.update(anonymous('a1'), submission('f2', 'a1'))
+    expect(db.update(user('boss'), { [`${FEEDBACK_PATH}/f2`]: null, [feedbackImagesPath('f2')]: null })).toBe(true)
+  })
+
+  it('читают администратор и автор с настоящим аккаунтом; анонимный автор и чужие — нет', () => {
+    const db = createDb({ interviewPrep: { admins: { boss: true } } })
+    db.update(user('u1'), withImages('f1', 'u1', [PNG]))
+    db.update(anonymous('a1'), withImages('f2', 'a1', [PNG]))
+
+    expect(images(db, 'f2')).not.toBeNull()
+    expect(db.read(user('boss'), feedbackImagesPath('f1'))).toBe(true)
+    expect(db.read(user('u1'), feedbackImagesPath('f1'))).toBe(true)
+    expect(db.read(user('u2'), feedbackImagesPath('f1'))).toBe(false)
+    expect(db.read(anonymous('a1'), feedbackImagesPath('f2'))).toBe(false)
+    expect(db.read(null, feedbackImagesPath('f1'))).toBe(false)
+    expect(db.read(user('u1'), 'interviewPrep/feedbackImages')).toBe(false)
+  })
+})
+
 // sendFeedback пишет в тот же симулятор: так проверяется, что приложение отправляет то, что примут правила.
 const fake = vi.hoisted(() => ({
   update: null as null | ((values: Record<string, unknown>) => boolean),
@@ -365,5 +488,14 @@ describe('sendFeedback и правила базы', () => {
     expect(item(db, 'id1')).toMatchObject({ uid: 'a1', status: 'new', page: '/level/vue-junior/2' })
 
     await expect(sendFeedback({ ...draft, text: 'Ещё одно замечание' }, 'a1')).rejects.toThrow('PERMISSION_DENIED')
+  })
+
+  it('замечание с картинками от приложения проходит правила', async () => {
+    const db = createDb()
+    fake.update = (values) => db.update(anonymous('a1'), values)
+
+    await expect(sendFeedback({ ...draft, images: [PNG, WEBP] }, 'a1')).resolves.toBe('id1')
+    expect(item(db, 'id1')).toMatchObject({ imageCount: 2 })
+    expect(images(db, 'id1')).toEqual({ 0: PNG, 1: WEBP })
   })
 })

@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildFeedbackRecord, describeContext, feedbackIssues, normalizeQuote, parseFeedbackItem, parseFeedbackList } from './report'
+import {
+  buildFeedbackRecord,
+  describeContext,
+  feedbackImagesValue,
+  feedbackIssues,
+  isFeedbackImage,
+  normalizeQuote,
+  parseFeedbackImages,
+  parseFeedbackItem,
+  parseFeedbackList,
+} from './report'
 
 import type { FeedbackDraft } from '../model/types'
 
@@ -49,6 +59,7 @@ describe('buildFeedbackRecord', () => {
       createdAt: 'TS',
       uid: 'u1',
       status: 'new',
+      imageCount: 0,
     })
     expect(Object.values(record)).not.toContain(undefined)
   })
@@ -82,6 +93,41 @@ describe('parseFeedbackList', () => {
     expect(list[0]?.step).toBe('quiz')
     expect(parseFeedbackList(null)).toEqual([])
     expect(parseFeedbackItem('x', 'строка')).toBeNull()
+  })
+})
+
+describe('картинки замечания', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgo='
+  const WEBP = 'data:image/webp;base64,UklGRhYAAABXRUJQ'
+
+  it('принимает только data URL WebP, PNG и JPEG не длиннее 400 000 символов', () => {
+    expect(isFeedbackImage(PNG)).toBe(true)
+    expect(isFeedbackImage('data:image/jpeg;base64,/9j/')).toBe(true)
+    expect(isFeedbackImage('data:image/svg+xml;base64,PHN2Zz4=')).toBe(false)
+    expect(isFeedbackImage('data:image/gif;base64,R0lGOD')).toBe(false)
+    expect(isFeedbackImage('javascript:alert(1)')).toBe(false)
+    expect(isFeedbackImage('data:image/png;base64,')).toBe(false)
+    expect(isFeedbackImage(`data:image/webp;base64,${'A'.repeat(400_000)}`)).toBe(false)
+  })
+
+  it('пишет не больше двух картинок с ключами 0 и 1, считает их в imageCount', () => {
+    expect(feedbackImagesValue([PNG, 'мусор', WEBP, PNG])).toEqual({ 0: PNG, 1: WEBP })
+    expect(feedbackImagesValue([])).toBeNull()
+    expect(buildFeedbackRecord({ ...draft, images: [PNG, WEBP, PNG] }, 'u1', '1', 0).imageCount).toBe(2)
+  })
+
+  it('читает картинки из массива и из объекта, отбрасывая недопустимые', () => {
+    expect(parseFeedbackImages([PNG, WEBP])).toEqual([PNG, WEBP])
+    expect(parseFeedbackImages({ 1: WEBP, 0: PNG })).toEqual([PNG, WEBP])
+    expect(parseFeedbackImages({ 0: 'data:text/html;base64,PGI+', 1: PNG })).toEqual([PNG])
+    expect(parseFeedbackImages(null)).toEqual([])
+  })
+
+  it('imageCount из базы попадает в запись, только если больше нуля', () => {
+    const base = { kind: 'typo', text: 'Текст', uid: 'u', createdAt: 1, status: 'new', page: '/', appVersion: '1' }
+
+    expect(parseFeedbackItem('a', { ...base, imageCount: 2 })?.imageCount).toBe(2)
+    expect(parseFeedbackItem('a', { ...base, imageCount: 0 })).not.toHaveProperty('imageCount')
   })
 })
 

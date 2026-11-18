@@ -105,3 +105,49 @@
 
     .feedback-card__field
       width: 100%
+
+  &__images-note
+    margin: 0
+    color: var(--p-text-muted-color)
+    font-size: ds.$font-size-sm
+
+  &__thumbs
+    display: flex
+    flex-wrap: wrap
+    gap: ds.$space-2
+    margin: 0
+    padding: 0
+    list-style: none
+
+  &__thumb
+    display: block
+    padding: 0
+    border: 1px solid var(--p-content-border-color)
+    border-radius: ds.$radius-sm
+    background: var(--app-background)
+    cursor: zoom-in
+    overflow: hidden
+
+    &:focus-visible
+      +ds.focus-ring
+
+    img
+      display: block
+      width: 8rem
+      height: 6rem
+      object-fit: cover
+
+  &__full
+    display: grid
+    gap: ds.$space-3
+    justify-items: start
+    margin: 0
+
+    img
+      display: block
+      max-width: 100%
+      height: auto
+      border-radius: ds.$radius-sm
+
+    a
+      color: var(--app-link)

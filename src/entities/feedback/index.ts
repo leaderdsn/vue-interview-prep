@@ -6,12 +6,16 @@ export {
   feedbackError,
   feedbackErrorMessage,
   fetchAllFeedback,
+  fetchFeedbackImages,
   fetchMyFeedback,
   sendFeedback,
   updateFeedback,
 } from './api/feedbackApi'
 export type { FeedbackErrorCode } from './api/feedbackApi'
 export {
+  FEEDBACK_IMAGE_LIMITS,
+  FEEDBACK_IMAGE_PREFIXES,
+  FEEDBACK_IMAGES_PATH,
   FEEDBACK_INTERVAL_MS,
   FEEDBACK_KIND_LABELS,
   FEEDBACK_KINDS,
@@ -19,15 +23,20 @@ export {
   FEEDBACK_PATH,
   FEEDBACK_STATUS_LABELS,
   FEEDBACK_STATUSES,
+  feedbackImagesPath,
   feedbackLimitPath,
 } from './config/feedback'
 export {
   buildFeedbackRecord,
+  cleanFeedbackImages,
   describeContext,
+  feedbackImagesValue,
   feedbackIssues,
+  isFeedbackImage,
   isFeedbackKind,
   isFeedbackStatus,
   normalizeQuote,
+  parseFeedbackImages,
   parseFeedbackItem,
   parseFeedbackList,
 } from './lib/report'
