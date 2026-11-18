@@ -41,7 +41,8 @@ describe('parseBlocks и serializeBlocks', () => {
     }
   })
 
-  it('распознаёт в контенте блоки форм, а не только HTML', () => {
+  // Тоже разбирает все темы всех уровней, поэтому лимит времени как у теста выше.
+  it('распознаёт в контенте блоки форм, а не только HTML', { timeout: 30_000 }, () => {
     const types = new Set(levels.flatMap((level) => level.topics.flatMap((topic) => parseBlocks(topic.html).map((b) => b.type))))
 
     expect([...types].sort()).toEqual(['code', 'heading', 'html', 'list', 'note', 'paragraph', 'say', 'table', 'warn'])

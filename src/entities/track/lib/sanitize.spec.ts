@@ -5,7 +5,8 @@ import { fetchBundledLevel, TRACKS } from '../api/trackApi'
 import { sanitizeTopicHtml } from './sanitize'
 
 describe('sanitizeTopicHtml', () => {
-  it('не меняет ни одну тему из сборки', async () => {
+  // Проходит по всем темам всех уровней: при параллельном прогоне всего набора не укладывается в 5 секунд по умолчанию.
+  it('не меняет ни одну тему из сборки', { timeout: 30_000 }, async () => {
     const levels = await Promise.all(TRACKS.flatMap((track) => track.levels.map((level) => fetchBundledLevel(level.id))))
 
     for (const level of levels) {

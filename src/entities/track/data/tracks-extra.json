@@ -438,5 +438,93 @@
         "quizCount": 12
       }
     ]
+  },
+  {
+    "id": "angular",
+    "title": "Angular",
+    "description": "Современный Angular с сигналами: компоненты и шаблоны, DI, роутер и формы, change detection и zoneless, RxJS, SSR, архитектура и тестирование",
+    "category": "angular",
+    "levels": [
+      {
+        "id": "angular-junior",
+        "level": "junior",
+        "description": "Standalone-компоненты, шаблоны и control flow, сигналы, сервисы и DI, роутер и формы",
+        "topicTitles": [
+          "Компоненты и шаблоны: standalone, привязки, control flow",
+          "Сигналы: signal, computed, effect",
+          "Сервисы и внедрение зависимостей",
+          "Роутер и формы"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "angular-middle",
+        "level": "middle",
+        "description": "Change detection и zoneless, API компонентов на сигналах, RxJS в Angular, HTTP и ленивая загрузка",
+        "topicTitles": [
+          "Change detection: OnPush, сигналы и zoneless",
+          "API компонентов: input, output, model, signal-запросы",
+          "RxJS в Angular: подписки, связь с сигналами, resource",
+          "HTTP-клиент, интерсепторы и ленивая загрузка"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "angular-senior",
+        "level": "senior",
+        "description": "SSR и гидратация, производительность, архитектура больших приложений, тестирование и миграции",
+        "topicTitles": [
+          "SSR, гидратация и @defer",
+          "Производительность Angular-приложения",
+          "Архитектура большого приложения",
+          "Тестирование и миграции между версиями"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "ngrx",
+    "title": "NgRx и состояние в Angular",
+    "description": "Где хранить состояние в Angular: сервисы и сигналы, NgRx Store с эффектами, Signal Store, Entity, архитектура и альтернативы",
+    "category": "angular",
+    "levels": [
+      {
+        "id": "ngrx-junior",
+        "level": "junior",
+        "description": "Когда нужен стор, NgRx Store: actions, reducers, селекторы и эффекты",
+        "topicTitles": [
+          "Состояние в Angular: сервисы, сигналы или стор",
+          "Store: actions и reducers",
+          "Селекторы и чтение состояния в компонентах",
+          "Effects: запросы и побочные эффекты"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "ngrx-middle",
+        "level": "middle",
+        "description": "Signal Store, асинхронность и ComponentStore, Entity и нормализация, тестирование",
+        "topicTitles": [
+          "Signal Store: withState, withComputed, withMethods",
+          "Асинхронность в Signal Store: rxMethod и ComponentStore",
+          "Entity и нормализация данных",
+          "Тестирование стора и эффектов"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "ngrx-senior",
+        "level": "senior",
+        "description": "Архитектура состояния, расширения Signal Store, производительность и отладка, сравнение с альтернативами",
+        "topicTitles": [
+          "Архитектура состояния большого приложения",
+          "Расширения Signal Store: features, хуки, events",
+          "Производительность и отладка: DevTools, мемоизация, runtime checks",
+          "NgRx и альтернативы: NGXS, Elf, сигналы без библиотек"
+        ],
+        "quizCount": 12
+      }
+    ]
   }
 ]
