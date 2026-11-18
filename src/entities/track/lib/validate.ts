@@ -77,6 +77,55 @@ export function isValidTopics(topics: unknown): topics is Topic[] {
   return topicsIssues(topics).length === 0
 }
 
+/**
+ * Во сколько раз верный вариант может быть длиннее среднего неверного. Длиннее — ответ угадывается
+ * без знаний: «выбирай самый подробный вариант».
+ */
+export const ANSWER_LENGTH_RATIO = 1.5
+
+/** Длины верного варианта и остальных; null, если вопрос сломан (это ловит `questionIssues`). */
+function optionLengths(question: QuizQuestion): { answer: number; others: number[] } | null {
+  const { options, answer } = question
+  if (!Array.isArray(options) || options.length < 2 || typeof options[answer] !== 'string') return null
+  const lengths = options.map((option) => String(option).trim().length)
+  return { answer: lengths[answer] ?? 0, others: lengths.filter((_, index) => index !== answer) }
+}
+
+/** Подсказка редактору: верный вариант заметно длиннее неверных. Не ошибка — сохранить можно. */
+export function answerLengthHint(question: QuizQuestion): string | null {
+  const lengths = optionLengths(question)
+  if (!lengths) return null
+  const mean = lengths.others.reduce((sum, length) => sum + length, 0) / lengths.others.length
+  return mean > 0 && lengths.answer > mean * ANSWER_LENGTH_RATIO
+    ? 'верный вариант заметно длиннее остальных — его легко угадать по длине'
+    : null
+}
+
+/**
+ * Перекос длины ответов во всём тесте. При случайном порядке верный вариант самый длинный примерно в четверти
+ * вопросов; допускаем треть. Самым коротким он тоже не должен быть систематически — иначе перекос просто
+ * перевернётся. Вопросы с подсказкой `answerLengthHint` перечисляются отдельно.
+ */
+export function answerLengthIssues(quiz: readonly QuizQuestion[]): string[] {
+  const limit = Math.ceil(quiz.length / 3)
+  let longest = 0
+  let shortest = 0
+  const hints: string[] = []
+  quiz.forEach((question, index) => {
+    const lengths = optionLengths(question)
+    if (!lengths) return
+    if (lengths.answer >= Math.max(...lengths.others)) longest++
+    if (lengths.answer <= Math.min(...lengths.others)) shortest++
+    const hint = answerLengthHint(question)
+    if (hint) hints.push(`Вопрос ${index + 1}: ${hint}`)
+  })
+  return [
+    ...(longest > limit ? [`верный вариант самый длинный в ${longest} вопросах из ${quiz.length} (допустимо до ${limit})`] : []),
+    ...(shortest > limit ? [`верный вариант самый короткий в ${shortest} вопросах из ${quiz.length} (допустимо до ${limit})`] : []),
+    ...hints,
+  ]
+}
+
 /** Ошибки собственного контента уровня: темы с текстом и корректный тест. */
 export function levelIssues(level: Level): string[] {
   return [...topicsIssues(level.topics), ...quizIssues(level.quiz, level.topics.length)]

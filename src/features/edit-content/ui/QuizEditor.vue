@@ -6,6 +6,8 @@ import { createQuestion, moveItem, removeItem } from '../model/draft'
 import QuestionEditor from './QuestionEditor.vue'
 import RepoFiles from './RepoFiles.vue'
 
+import { answerLengthIssues } from '@/entities/track'
+
 import type { EditorFocus } from '../model/focus'
 import type { LevelDraft } from '../model/levelDraft'
 import type { Level, LevelOverride, QuizQuestion } from '@/entities/track'
@@ -53,6 +55,8 @@ const status = ref<{ severity: 'success' | 'error'; text: string } | null>(null)
 const busy = ref(false)
 
 const countChanged = computed(() => draft.quiz.length !== level.quiz.length)
+/** Перекос длины ответов во всём тесте; подсказки по отдельным вопросам показывает QuestionEditor. */
+const lengthWarnings = computed(() => answerLengthIssues(draft.quiz).filter((issue) => !issue.startsWith('Вопрос ')))
 const savedAt = computed(() => (override?.updatedAt ? new Date(override.updatedAt).toLocaleString('ru-RU') : ''))
 
 function add() {
@@ -129,6 +133,10 @@ function reset() {
     </Message>
     <Message v-if="missingFocus !== null" severity="warn" size="small" closable @close="missingFocus = null">
       Вопроса {{ missingFocus + 1 }} в тесте нет (сейчас вопросов {{ draft.quiz.length }}): возможно, его удалили.
+    </Message>
+
+    <Message v-if="lengthWarnings.length" severity="warn" size="small">
+      Ответы можно угадать по длине: {{ lengthWarnings.join('; ') }}. Сохранить можно, но лучше выровнять варианты.
     </Message>
 
     <div ref="list" class="quiz-editor__list">

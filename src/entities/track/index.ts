@@ -13,6 +13,8 @@ export {
 export type { TrackIndexFile } from './api/trackApi'
 export { sanitizeTopicHtml } from './lib/sanitize'
 export {
+  answerLengthHint,
+  answerLengthIssues,
   isValidQuiz,
   levelIssues,
   MAX_TOPICS,

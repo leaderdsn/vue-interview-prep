@@ -4,6 +4,8 @@ import { computed } from 'vue'
 import { TYPE_LABELS } from '../model/draft'
 import { DELETED_TOPIC, questionDraftIssues } from '../model/structure'
 
+import { answerLengthHint } from '@/entities/track'
+
 import type { QuestionType, QuizQuestion } from '@/entities/track'
 
 const { index, total, topicTitles } = defineProps<{
@@ -22,6 +24,8 @@ const question = defineModel<QuizQuestion>({ required: true })
 const typeOptions = (Object.keys(TYPE_LABELS) as QuestionType[]).map((value) => ({ value, label: TYPE_LABELS[value] }))
 const topicOptions = computed(() => topicTitles.map((title, i) => ({ value: i, label: `${i + 1}. ${title}` })))
 const issues = computed(() => questionDraftIssues(question.value, topicTitles.length))
+/** Не ошибка: сохранить можно, но ответ угадывается по длине. */
+const lengthHint = computed(() => answerLengthHint(question.value))
 /** Тема вопроса удалена в черновике тем: выбор пустой, пока не выбрана другая. */
 const topicDeleted = computed(() => question.value.topic === DELETED_TOPIC)
 
@@ -109,6 +113,10 @@ function setOption(optionIndex: number, text: string) {
     <ul v-if="issues.length" class="editor-card__issues">
       <li v-for="issue in issues" :key="issue">{{ issue }}</li>
     </ul>
+    <p v-if="lengthHint" class="editor-card__hint">
+      <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+      Подсказка: {{ lengthHint }}. Сократите его или допишите неверные варианты.
+    </p>
 
     <div class="editor-card__actions">
       <Button

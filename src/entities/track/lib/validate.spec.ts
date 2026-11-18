@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { levelIssues, MAX_TOPICS, questionIssues, quizIssues, topicsIssues } from './validate'
+import { answerLengthHint, answerLengthIssues, levelIssues, MAX_TOPICS, questionIssues, quizIssues, topicsIssues } from './validate'
 
 import type { Level, QuizQuestion } from '../model/types'
 
@@ -85,5 +85,52 @@ describe('levelIssues', () => {
     }
 
     expect(levelIssues(level)).toEqual(['Тема 2: пустой заголовок или текст'])
+  })
+})
+
+describe('answerLengthHint', () => {
+  const withOptions = (options: string[], answer: number): QuizQuestion => ({ ...question, options, answer })
+
+  it('молчит, когда верный вариант не выделяется длиной', () => {
+    expect(answerLengthHint(withOptions(['короткий', 'средний вариант', 'ещё вариант', 'четвёртый'], 2))).toBeNull()
+  })
+
+  it('предупреждает, когда верный вариант в полтора раза длиннее среднего неверного', () => {
+    expect(answerLengthHint(withOptions(['да', 'нет', 'подробный правильный ответ с оговорками', 'никогда'], 2))).toMatch(/угадать по длине/)
+  })
+})
+
+describe('answerLengthIssues', () => {
+  // Верный вариант на месте answer длиной `answerLength`, остальные — по 10 символов.
+  const make = (answerLength: number): QuizQuestion => ({
+    ...question,
+    options: ['a'.repeat(answerLength), 'b'.repeat(10), 'c'.repeat(10), 'd'.repeat(10)].map((option, i) => `${option}${i}`),
+    answer: 0,
+  })
+
+  it('принимает тест без перекоса', () => {
+    // Верный вариант средней длины: не самый длинный и не самый короткий.
+    const middle: QuizQuestion = { ...question, options: ['a'.repeat(11), 'b'.repeat(12), 'c'.repeat(8), 'd'.repeat(10)], answer: 0 }
+    const quiz = [...Array.from({ length: 4 }, () => make(12)), ...Array.from({ length: 4 }, () => make(8)), ...Array.from({ length: 4 }, () => middle)]
+
+    expect(answerLengthIssues(quiz)).toEqual([])
+  })
+
+  it('находит тест, где верный ответ почти всегда самый длинный', () => {
+    const issues = answerLengthIssues(Array.from({ length: 12 }, () => make(14)))
+
+    expect(issues).toEqual(['верный вариант самый длинный в 12 вопросах из 12 (допустимо до 4)'])
+  })
+
+  it('находит и обратный перекос — верный ответ всегда самый короткий', () => {
+    expect(answerLengthIssues(Array.from({ length: 12 }, () => make(8)))).toEqual([
+      'верный вариант самый короткий в 12 вопросах из 12 (допустимо до 4)',
+    ])
+  })
+
+  it('перечисляет вопросы, где верный ответ заметно длиннее', () => {
+    const quiz = [make(30), make(8), make(8), make(12)]
+
+    expect(answerLengthIssues(quiz)).toContain('Вопрос 1: верный вариант заметно длиннее остальных — его легко угадать по длине')
   })
 })

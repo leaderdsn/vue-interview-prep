@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { levelIssues } from '../lib/validate'
+import { answerLengthIssues, levelIssues } from '../lib/validate'
 
 import { findIndexFile, TRACK_CATEGORIES, TRACK_INDEX_FILES, TRACKS } from './trackApi'
 
@@ -37,6 +37,13 @@ describe('контент направлений', () => {
     expect(level.topics.map((topic) => topic.title)).toEqual(summary.topicTitles)
     expect(level.quiz).toHaveLength(summary.quizCount)
     expect(levelIssues(level)).toEqual([])
+  })
+
+  it.each(summaries)('$level.id: верный ответ не угадывается по длине', ({ level: summary }) => {
+    const level = levels[`../data/levels/${summary.id}.json`]
+    if (!level) throw new Error(`Нет файла ${summary.id}.json`)
+
+    expect(answerLengthIssues(level.quiz)).toEqual([])
   })
 })
 
