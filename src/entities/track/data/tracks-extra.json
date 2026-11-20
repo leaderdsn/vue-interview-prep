@@ -526,5 +526,93 @@
         "quizCount": 12
       }
     ]
+  },
+  {
+    "id": "docker",
+    "title": "Docker",
+    "description": "Контейнеры для фронтенд-разработчика: образы и Dockerfile, Compose для разработки, многоэтапная сборка, образ фронтенда, безопасность и деплой на сервер",
+    "category": "general",
+    "levels": [
+      {
+        "id": "docker-junior",
+        "level": "junior",
+        "description": "Образы, контейнеры и слои, Dockerfile, запуск контейнеров, Compose для локальной разработки",
+        "topicTitles": [
+          "Зачем Docker: образы, контейнеры, слои",
+          "Dockerfile: инструкции и сборка образа",
+          "Запуск контейнеров: порты, переменные, тома, логи",
+          "Docker Compose для локальной разработки"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "docker-middle",
+        "level": "middle",
+        "description": "Многоэтапная сборка и кэш, образ фронтенда за nginx или Caddy, Compose всерьёз, данные и конфигурация",
+        "topicTitles": [
+          "Многоэтапная сборка и кэш слоёв",
+          "Образ фронтенда: статика за nginx или Caddy, SPA и переменные окружения",
+          "Compose всерьёз: сети, healthcheck, depends_on, профили, override-файлы",
+          "Данные и конфигурация: тома, секреты, .env"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "docker-senior",
+        "level": "senior",
+        "description": "Безопасность образов, сборка в CI, продакшен на одном сервере, отладка и путь к Kubernetes",
+        "topicTitles": [
+          "Безопасность образов: non-root, минимальные базы, сканирование, цепочка поставки",
+          "Сборка в CI: BuildKit, buildx, кэш, мультиплатформенные образы",
+          "Продакшен на одном сервере: reverse proxy, TLS, обновление и откат",
+          "Отладка и эксплуатация контейнеров, путь к Kubernetes"
+        ],
+        "quizCount": 12
+      }
+    ]
+  },
+  {
+    "id": "cicd",
+    "title": "CI/CD",
+    "description": "Пайплайны для фронтенда на GitHub Actions и GitLab CI: проверки и деплой, кэш и секреты, релизы, безопасность пайплайна и стратегии выкладки",
+    "category": "general",
+    "levels": [
+      {
+        "id": "cicd-junior",
+        "level": "junior",
+        "description": "Что такое CI и CD, GitHub Actions и GitLab CI, проверки фронтенда, деплой статического сайта",
+        "topicTitles": [
+          "Что такое CI и CD: пайплайн, этапы, артефакты",
+          "GitHub Actions и GitLab CI: workflow, jobs, steps, триггеры",
+          "Проверки фронтенда в CI: lint, типы, тесты, сборка",
+          "Деплой статического сайта: GitHub Pages и превью веток"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "cicd-middle",
+        "level": "middle",
+        "description": "Кэш и матрицы, секреты и окружения, переиспользование пайплайнов, ветки, версии и релизы",
+        "topicTitles": [
+          "Кэш, матрицы и параллельные задачи",
+          "Секреты, переменные и окружения",
+          "Переиспользование: reusable workflows, composite actions, include и компоненты GitLab",
+          "Ветки и релизы: окружения, теги, SemVer, changelog"
+        ],
+        "quizCount": 12
+      },
+      {
+        "id": "cicd-senior",
+        "level": "senior",
+        "description": "Безопасность пайплайна, стратегии деплоя, скорость и стоимость CI, надёжность релизов",
+        "topicTitles": [
+          "Безопасность пайплайна: права токена, OIDC, закрепление версий, цепочка поставки",
+          "Стратегии деплоя: blue-green, canary, feature flags, откат",
+          "Скорость и стоимость CI: монорепо, affected-сборки, удалённый кэш",
+          "Надёжность релизов: метрики DORA, мониторинг, работа с инцидентами"
+        ],
+        "quizCount": 12
+      }
+    ]
   }
 ]
