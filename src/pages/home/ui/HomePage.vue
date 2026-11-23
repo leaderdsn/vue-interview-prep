@@ -34,10 +34,17 @@ const category = computed<CategoryFilter>({
 
 /** Группы для показа: при «Все» — каждая категория со своим заголовком, иначе одна выбранная. */
 const groups = computed(() =>
-  TRACK_CATEGORIES.filter((item) => category.value === 'all' || item.id === category.value).map((item) => ({
-    ...item,
-    tracks: TRACKS.filter((track) => track.category === item.id),
-  })),
+  TRACK_CATEGORIES.filter((item) => category.value === 'all' || item.id === category.value).map((item) => {
+    const tracks = TRACKS.filter((track) => track.category === item.id)
+    const categoryLevels = tracks.flatMap((track) => track.levels)
+    return {
+      ...item,
+      tracks,
+      levelCount: categoryLevels.length,
+      // Сданным считается уровень с результатом теста не ниже проходного балла.
+      passedCount: categoryLevels.filter((level) => progress.getLevel(level.id).passedAt !== null).length,
+    }
+  }),
 )
 
 // Главная считает темы по индексу направлений (tracks.json, tracks-extra.json), а не по правкам из базы:
@@ -101,7 +108,12 @@ const resume = computed(() => {
         class="home-page__category"
         :aria-labelledby="`category-${group.id}`"
       >
-        <h3 :id="`category-${group.id}`" class="home-page__category-title">{{ group.label }}</h3>
+        <div class="home-page__category-head">
+          <h3 :id="`category-${group.id}`" class="home-page__category-title">{{ group.label }}</h3>
+          <span v-if="group.levelCount" class="home-page__category-stats">
+            сдано {{ group.passedCount }} из {{ group.levelCount }} уровней
+          </span>
+        </div>
         <TrackGrid v-if="group.tracks.length" :tracks="group.tracks" />
         <p v-else class="home-page__hint">Направления готовятся.</p>
       </section>

@@ -17,8 +17,10 @@ import type { Plugin, ResolvedConfig } from 'vite'
 
 type LevelFile = {
   topics: { title: string; html: string }[]
-  quiz: { question: string }[]
 }
+
+/** Число вопросов и вариантов теста из индекса направлений (вопросы в пререндер не попадают). */
+type QuizInfo = { quizCount?: number; quizVariants?: number }
 
 type Page = { meta: PageMeta; body: string }
 
@@ -57,7 +59,12 @@ function headTags(meta: PageMeta, ctx: SeoContext): string {
     `<meta property="og:title" content="${escapeHtml(meta.title)}" />`,
     `<meta property="og:description" content="${escapeHtml(meta.description)}" />`,
     `<meta property="og:url" content="${escapeHtml(url)}" />`,
-    '<meta name="twitter:card" content="summary" />',
+    // Картинка общая для всех страниц, генерируется скриптом build/icons.ts.
+    `<meta property="og:image" content="${escapeHtml(`${ctx.siteUrl}/og-image.png`)}" />`,
+    '<meta property="og:image:width" content="1200" />',
+    '<meta property="og:image:height" content="630" />',
+    `<meta property="og:image:alt" content="${escapeHtml(ctx.appTitle)}" />`,
+    '<meta name="twitter:card" content="summary_large_image" />',
     ...(meta.structuredData ?? []).map(jsonLd),
   ]
   return tags.filter(Boolean).join('\n    ')
@@ -127,10 +134,13 @@ function buildPages(ctx: SeoContext, base: string, tracks: SeoTrack[], levels: M
         })
       })
 
-      const questions = content.quiz.map((item) => `<li>${escapeHtml(item.question)}</li>`).join('')
+      // Вопросы теста в статический HTML не выводятся, чтобы не раскрывать их заранее: только описание и темы.
+      const { quizCount = 0, quizVariants = 1 } = level as typeof level & QuizInfo
+      const variants = quizVariants > 1 ? `, ${quizVariants} вариантов` : ''
+      const topics = level.topicTitles.map((title) => `<li>${escapeHtml(title)}</li>`).join('')
       pages.push({
         meta: quizMeta(ctx, track, level),
-        body: `<main class="app-main">${header}<h1>Тест: ${name}</h1><ol>${questions}</ol>${steps('quiz')}</main>`,
+        body: `<main class="app-main">${header}<h1>Тест: ${name}</h1><p>${quizCount} вопросов${variants} с объяснениями ответов. Для зачёта нужно 80 % верных ответов. Вопросы по темам:</p><ul>${topics}</ul>${steps('quiz')}</main>`,
       })
     }
   }
