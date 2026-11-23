@@ -12,7 +12,9 @@ export type FeedbackContext = {
   /** Номер темы (с 1) или 'quiz'. */
   step?: number | 'quiz'
   topicTitle?: string
-  /** Индекс вопроса в тесте уровня (как в `level.quiz`). */
+  /** Номер варианта теста (с 0); у первого варианта поле не сохраняется. */
+  quizVariant?: number
+  /** Индекс вопроса в варианте теста `quizVariant` (как в `level.quizVariants[quizVariant]`). */
   questionIndex?: number
   questionText?: string
   /** Выделенный в теме текст. */

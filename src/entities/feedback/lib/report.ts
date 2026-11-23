@@ -77,6 +77,7 @@ function cleanContext(context: FeedbackContext): FeedbackContext {
   if (context.levelId) result.levelId = clip(context.levelId, FEEDBACK_LIMITS.levelId)
   if (context.step === 'quiz' || (Number.isInteger(context.step) && Number(context.step) >= 1)) result.step = context.step
   if (context.topicTitle) result.topicTitle = clip(context.topicTitle, FEEDBACK_LIMITS.topicTitle)
+  if (Number.isInteger(context.quizVariant) && Number(context.quizVariant) > 0) result.quizVariant = context.quizVariant
   if (Number.isInteger(context.questionIndex) && Number(context.questionIndex) >= 0) result.questionIndex = context.questionIndex
   if (context.questionText) result.questionText = clip(context.questionText, FEEDBACK_LIMITS.questionText)
   const quote = context.quote ? normalizeQuote(context.quote) : ''
@@ -132,6 +133,7 @@ export function parseFeedbackItem(id: string, raw: unknown): FeedbackItem | null
     if (text !== undefined) item[key] = text
   }
   if (value.step === 'quiz' || typeof value.step === 'number') item.step = value.step
+  if (typeof value.quizVariant === 'number' && value.quizVariant > 0) item.quizVariant = value.quizVariant
   if (typeof value.questionIndex === 'number') item.questionIndex = value.questionIndex
   if (typeof value.imageCount === 'number' && value.imageCount > 0) {
     item.imageCount = Math.min(Math.floor(value.imageCount), FEEDBACK_IMAGE_LIMITS.maxCount)
@@ -152,8 +154,9 @@ export function parseFeedbackList(raw: unknown): FeedbackItem[] {
 export function describeContext(context: FeedbackContext): string {
   if (!context.levelId) return context.page === '/' ? 'Главная страница' : `Страница ${context.page}`
   if (context.step === 'quiz') {
+    const variant = context.quizVariant ? `, вариант ${context.quizVariant + 1}` : ''
     const question = context.questionIndex === undefined ? '' : `, вопрос ${context.questionIndex + 1}`
-    return `${context.levelId} · тест${question}`
+    return `${context.levelId} · тест${variant}${question}`
   }
   const topic = context.step === undefined ? '' : ` · тема ${context.step}`
   const title = context.topicTitle ? ` «${context.topicTitle}»` : ''

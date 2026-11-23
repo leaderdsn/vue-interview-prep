@@ -4,7 +4,9 @@
  */
 export type EditorFocus = {
   step: number | 'quiz'
-  /** Индекс вопроса в тесте уровня. */
+  /** Номер варианта теста (с 0); без него — первый вариант. */
+  quizVariant?: number
+  /** Индекс вопроса в варианте теста. */
   questionIndex?: number
   key: number
 }

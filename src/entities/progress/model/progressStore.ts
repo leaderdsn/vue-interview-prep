@@ -3,6 +3,7 @@ import { ref, toRaw, watch } from 'vue'
 
 import { PASS_SCORE, PROGRESS_STORAGE_KEY, PROGRESS_VERSION } from '../config/storage'
 import { createEmptyLevel, isRecord, parseLastVisited, parseLevel, parseLevels } from '../lib/parse'
+import { pickVariant } from '../lib/variants'
 
 import type { LastVisited, LevelProgress, ProgressSnapshot } from './types'
 
@@ -70,8 +71,26 @@ export const useProgressStore = defineStore('progress', () => {
     level.seenTopics = [...level.seenTopics, topicIndex].sort((a, b) => a - b)
   }
 
-  function recordQuizResult(levelId: string, percent: number) {
+  /**
+   * Вариант теста для прохождения: начатый и не проверенный (обновление страницы не меняет вопросы) или новый
+   * по правилам `pickVariant`. Варианта с таким номером могли удалить в админке — тогда выбирается заново.
+   */
+  function startQuiz(levelId: string, variantCount: number, random: () => number = Math.random): number {
+    const current = getLevel(levelId)
+    if (current.activeVariant !== null && current.activeVariant < variantCount) return current.activeVariant
+    if (variantCount <= 1 && current.activeVariant === null) return 0
     const level = ensureLevel(levelId)
+    const { variant, resetCircle } = pickVariant(variantCount, level, random)
+    if (resetCircle) level.variantsTaken = []
+    level.activeVariant = variant
+    return variant
+  }
+
+  function recordQuizResult(levelId: string, percent: number, variant = 0) {
+    const level = ensureLevel(levelId)
+    if (!level.variantsTaken.includes(variant)) level.variantsTaken = [...level.variantsTaken, variant].sort((a, b) => a - b)
+    level.lastVariant = variant
+    level.activeVariant = null
     level.attempts += 1
     level.lastScore = percent
     level.bestScore = Math.max(level.bestScore ?? 0, percent)
@@ -135,6 +154,7 @@ export const useProgressStore = defineStore('progress', () => {
     seenCount,
     topicsPercent,
     markTopicSeen,
+    startQuiz,
     recordQuizResult,
     setLastVisited,
     resetLevel,

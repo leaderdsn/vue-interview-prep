@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 
 import { PASS_SCORE, useProgressStore } from '@/entities/progress'
+import { quizVariant } from '@/entities/track'
 import { trackEvent } from '@/shared/lib'
 
 import { createQuizSession, scoreQuiz } from '../model/quiz'
@@ -17,22 +18,27 @@ const emit = defineEmits<{
 }>()
 
 defineSlots<{
-  /** Дополнительные действия у вопроса после проверки; questionIndex — индекс в `level.quiz`. */
-  'question-actions'?: (props: { question: QuizQuestion; questionIndex: number }) => unknown
+  /** Дополнительные действия у вопроса после проверки; questionIndex — индекс в варианте `variant` (`level.quizVariants`). */
+  'question-actions'?: (props: { question: QuizQuestion; questionIndex: number; variant: number }) => unknown
 }>()
 
 const TYPE_LABELS = { theory: 'Теория', practice: 'Практика' } as const
 
 const progress = useProgressStore()
 
-const session = ref(createQuizSession(level.quiz))
+/** Номер варианта теста (с 0); выбирает хранилище прогресса, чтобы варианты не повторялись. */
+const variant = ref(progress.startQuiz(level.id, level.quizVariants.length))
+const questions = computed(() => quizVariant(level, variant.value))
+const variantCount = computed(() => level.quizVariants.length)
+
+const session = ref(createQuizSession(questions.value))
 const answers = ref<QuizAnswers>({})
 const result = ref<QuizResult | null>(null)
 const warnedUnanswered = ref(false)
 const resultRef = useTemplateRef<HTMLElement>('resultRef')
 
-const items = computed(() => session.value.map((item) => ({ ...item, question: level.quiz[item.questionIndex]! })))
-const unansweredCount = computed(() => level.quiz.length - Object.keys(answers.value).length)
+const items = computed(() => session.value.map((item) => ({ ...item, question: questions.value[item.questionIndex]! })))
+const unansweredCount = computed(() => questions.value.length - Object.keys(answers.value).length)
 const passed = computed(() => (result.value?.percent ?? 0) >= PASS_SCORE)
 const checked = computed(() => result.value !== null)
 
@@ -49,15 +55,21 @@ async function check() {
     warnedUnanswered.value = true
     return
   }
-  result.value = scoreQuiz(level.quiz, answers.value)
-  progress.recordQuizResult(level.id, result.value.percent)
-  trackEvent('quiz_complete', { level_id: level.id, track_id: level.trackId, score: result.value.percent })
+  result.value = scoreQuiz(questions.value, answers.value)
+  progress.recordQuizResult(level.id, result.value.percent, variant.value)
+  trackEvent('quiz_complete', {
+    level_id: level.id,
+    track_id: level.trackId,
+    score: result.value.percent,
+    variant: variant.value + 1,
+  })
   await nextTick()
   resultRef.value?.focus()
 }
 
 function restart() {
-  session.value = createQuizSession(level.quiz)
+  variant.value = progress.startQuiz(level.id, level.quizVariants.length)
+  session.value = createQuizSession(questions.value)
   answers.value = {}
   result.value = null
   warnedUnanswered.value = false
@@ -66,19 +78,20 @@ function restart() {
 
 function optionState(questionIndex: number, optionIndex: number): 'right' | 'wrong' | null {
   if (!checked.value) return null
-  if (optionIndex === level.quiz[questionIndex]?.answer) return 'right'
+  if (optionIndex === questions.value[questionIndex]?.answer) return 'right'
   return answers.value[questionIndex] === optionIndex ? 'wrong' : null
 }
 
 function isCorrect(questionIndex: number) {
-  return answers.value[questionIndex] === level.quiz[questionIndex]?.answer
+  return answers.value[questionIndex] === questions.value[questionIndex]?.answer
 }
 </script>
 
 <template>
   <div class="quiz-runner">
     <p class="quiz-runner__intro">
-      {{ level.quiz.length }} вопросов · для зачёта нужно {{ PASS_SCORE }}% · варианты каждый раз перемешиваются
+      <template v-if="variantCount > 1">Вариант {{ variant + 1 }} из {{ variantCount }} · </template>
+      {{ questions.length }} вопросов · для зачёта нужно {{ PASS_SCORE }}% · варианты ответов каждый раз перемешиваются
     </p>
 
     <section
@@ -96,6 +109,7 @@ function isCorrect(questionIndex: number) {
       <p class="quiz-result__score">
         <strong>{{ result.percent }}%</strong>
         <span>{{ result.correct }} из {{ result.total }} верно</span>
+        <span v-if="variantCount > 1">вариант {{ variant + 1 }} из {{ variantCount }}</span>
       </p>
       <ul class="quiz-result__split">
         <li>Теория: {{ result.byType.theory.correct }}/{{ result.byType.theory.total }}</li>
@@ -103,6 +117,7 @@ function isCorrect(questionIndex: number) {
       </ul>
       <p class="quiz-result__hint">
         {{ passed ? 'Отличный результат. Можно переходить к следующему уровню.' : 'Разберите ошибки ниже, перечитайте темы и попробуйте ещё раз.' }}
+        <template v-if="variantCount > 1">Следующая попытка — с другим вариантом вопросов.</template>
       </p>
       <Button label="Пройти заново" icon="pi pi-refresh" severity="secondary" @click="restart" />
     </section>
@@ -159,7 +174,7 @@ function isCorrect(questionIndex: number) {
                 Перечитать тему
               </button>
               <!-- Действия страницы с вопросом после проверки, например «Ошибка в вопросе» -->
-              <slot name="question-actions" :question="item.question" :question-index="item.questionIndex" />
+              <slot name="question-actions" :question="item.question" :question-index="item.questionIndex" :variant="variant" />
             </div>
           </div>
         </template>

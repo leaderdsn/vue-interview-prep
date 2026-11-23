@@ -15,7 +15,10 @@
           "Функции и замыкания",
           "Массивы и объекты"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "js-middle",
@@ -27,7 +30,10 @@
           "Асинхронность: event loop, промисы, async/await",
           "Современный JS: модули, коллекции, генераторы"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "js-senior",
@@ -39,7 +45,10 @@
           "Live-coding: типовые задачи с разбором",
           "Производительность JS и main thread"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -59,7 +68,10 @@
           "Union, intersection, литеральные типы и сужение",
           "Функции и enum"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "ts-middle",
@@ -71,7 +83,10 @@
           "Type guards и discriminated unions",
           "TypeScript во Vue 3"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "ts-senior",
@@ -83,7 +98,10 @@
           "Структурная типизация и её ловушки",
           "Конфигурация и типизация на уровне проекта"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -103,7 +121,10 @@
           "ref, reactive и computed",
           "watch и жизненный цикл"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "vue-middle",
@@ -115,7 +136,10 @@
           "Компоненты продвинуто",
           "Pinia и Vue Router"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "vue-senior",
@@ -127,7 +151,10 @@
           "Производительность больших приложений",
           "SSR, Nuxt и глобальные механизмы"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -147,7 +174,10 @@
           "Композиция вместо наследования",
           "Что такое паттерн проектирования"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "patterns-middle",
@@ -159,7 +189,10 @@
           "Поведенческие паттерны",
           "Паттерны компонентов Vue"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "patterns-senior",
@@ -171,7 +204,10 @@
           "Слои и паттерны работы с данными",
           "Анти-паттерны, code smells и рефакторинг"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -191,7 +227,10 @@
           "Где хранить состояние",
           "Слой работы с API"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "arch-middle",
@@ -203,7 +242,10 @@
           "Сквозные задачи: авторизация, ошибки, права, i18n",
           "Дизайн-система и UI-кит"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "arch-senior",
@@ -215,7 +257,10 @@
           "Архитектурные решения и команда",
           "Надёжность в продакшене"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -235,7 +280,10 @@
           "Позиционирование",
           "Единицы, цвета и CSS-переменные"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "css-middle",
@@ -247,7 +295,10 @@
           "Адаптивность",
           "Стили во Vue и темизация"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "css-senior",
@@ -259,7 +310,10 @@
           "Анимации и переходы",
           "Архитектура стилей и современный CSS"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -279,7 +333,10 @@
           "Формы",
           "Ссылки, изображения и медиа"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "html-middle",
@@ -291,7 +348,10 @@
           "Загрузка ресурсов",
           "SEO-основы для SPA"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "html-senior",
@@ -303,7 +363,10 @@
           "Web Components",
           "Сложные формы и i18n"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -323,7 +386,10 @@
           "Запросы из фронтенда: fetch, axios, отмена и ошибки",
           "Хранилища в браузере"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "web-middle",
@@ -335,7 +401,10 @@
           "Аутентификация: сессии, JWT, refresh-токены",
           "Реальное время и версии HTTP"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "web-senior",
@@ -347,7 +416,10 @@
           "Core Web Vitals и скорость загрузки",
           "Диагностика: DevTools, RUM, утечки памяти"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -367,7 +439,10 @@
           "ESLint и Prettier",
           "Зачем нужны тесты"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "tools-middle",
@@ -379,7 +454,10 @@
           "Vite: как он устроен и как настраивается",
           "Git продвинуто"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "tools-senior",
@@ -391,7 +469,10 @@
           "Docker и деплой фронтенда",
           "Командный процесс и качество"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   }

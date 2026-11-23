@@ -6,7 +6,7 @@ import { createQuestion, moveItem, removeItem } from '../model/draft'
 import QuestionEditor from './QuestionEditor.vue'
 import RepoFiles from './RepoFiles.vue'
 
-import { answerLengthIssues } from '@/entities/track'
+import { answerLengthIssues, MAX_QUIZ_VARIANTS } from '@/entities/track'
 
 import type { EditorFocus } from '../model/focus'
 import type { LevelDraft } from '../model/levelDraft'
@@ -35,6 +35,7 @@ watch(
     missingFocus.value = null
     const target = focus?.step === 'quiz' ? focus.questionIndex : undefined
     if (target === undefined) return
+    draft.selectVariant(focus?.quizVariant ?? 0)
     if (target < 0 || target >= draft.quiz.length) {
       missingFocus.value = target
       return
@@ -48,13 +49,33 @@ watch(
   { immediate: true },
 )
 
-const hasOverride = computed(() => Boolean(override?.quiz))
+const hasOverride = computed(() => Boolean(override?.quizVariants))
 const brokenOverride = computed(() => hasOverride.value && !draft.quizApplied)
 
 const status = ref<{ severity: 'success' | 'error'; text: string } | null>(null)
 const busy = ref(false)
 
-const countChanged = computed(() => draft.quiz.length !== level.quiz.length)
+const fileQuizCount = computed(() => level.quizVariants[0]?.length ?? 0)
+/** Число вопросов или вариантов отличается от файла уровня в репозитории. */
+const countChanged = computed(
+  () => (draft.variants[0]?.length ?? 0) !== fileQuizCount.value || draft.variants.length !== level.quizVariants.length,
+)
+
+const variantOptions = computed(() => draft.variants.map((_, index) => ({ value: index, label: `Вариант ${index + 1}` })))
+const activeVariant = computed({
+  get: () => draft.variant,
+  set: (value: number) => draft.selectVariant(value),
+})
+
+function addVariant() {
+  draft.addVariant()
+}
+
+function removeVariant() {
+  if (window.confirm(`Удалить вариант ${draft.variant + 1} целиком? Изменение попадёт к пользователям после сохранения.`)) {
+    draft.removeVariant(draft.variant)
+  }
+}
 /** Перекос длины ответов во всём тесте; подсказки по отдельным вопросам показывает QuestionEditor. */
 const lengthWarnings = computed(() => answerLengthIssues(draft.quiz).filter((issue) => !issue.startsWith('Вопрос ')))
 const savedAt = computed(() => (override?.updatedAt ? new Date(override.updatedAt).toLocaleString('ru-RU') : ''))
@@ -126,13 +147,47 @@ function reset() {
         <i class="pi pi-box" aria-hidden="true" />
         Сейчас у всех исходная версия из сборки
       </template>
-      · {{ draft.quiz.length }} вопросов
+      · вариантов: {{ draft.variants.length }}, в каждом {{ draft.variants[0]?.length ?? 0 }} вопросов
+    </p>
+
+    <div class="quiz-editor__variants" role="group" aria-label="Варианты теста">
+      <SelectButton
+        v-model="activeVariant"
+        :options="variantOptions"
+        option-label="label"
+        option-value="value"
+        :allow-empty="false"
+        aria-label="Вариант теста в редакторе"
+      />
+      <Button
+        label="Добавить вариант"
+        icon="pi pi-plus"
+        severity="secondary"
+        variant="outlined"
+        size="small"
+        :disabled="draft.variants.length >= MAX_QUIZ_VARIANTS"
+        @click="addVariant"
+      />
+      <Button
+        v-if="draft.variants.length > 1"
+        label="Удалить вариант"
+        icon="pi pi-trash"
+        severity="danger"
+        variant="text"
+        size="small"
+        @click="removeVariant"
+      />
+    </div>
+    <p class="quiz-editor__hint">
+      Пользователь при каждом прохождении получает вариант, который ещё не проходил. В вариантах одинаковое число вопросов
+      с тем же распределением по темам, вопросы не повторяются; новый вариант создаётся заготовкой по темам варианта 1.
     </p>
     <Message v-if="brokenOverride" severity="warn" size="small">
       Правка теста в базе не подходит к темам уровня и пользователям не показывается; в редакторе — тест из сборки.
     </Message>
     <Message v-if="missingFocus !== null" severity="warn" size="small" closable @close="missingFocus = null">
-      Вопроса {{ missingFocus + 1 }} в тесте нет (сейчас вопросов {{ draft.quiz.length }}): возможно, его удалили.
+      Вопроса {{ missingFocus + 1 }} в {{ draft.variants.length > 1 ? `варианте ${draft.variant + 1}` : 'тесте' }} нет
+      (сейчас вопросов {{ draft.quiz.length }}): возможно, его удалили.
     </Message>
 
     <Message v-if="lengthWarnings.length" severity="warn" size="small">
@@ -142,7 +197,7 @@ function reset() {
     <div ref="list" class="quiz-editor__list">
       <QuestionEditor
         v-for="(question, index) in draft.quiz"
-        :key="index"
+        :key="`${draft.variant}-${index}`"
         :model-value="question"
         :index="index"
         :total="draft.quiz.length"
@@ -163,8 +218,9 @@ function reset() {
         Темы добавлены, удалены или переставлены: «Сохранить для всех» сохранит тест вместе с темами.
       </p>
       <p v-if="countChanged" class="quiz-editor__hint">
-        Вопросов теперь {{ draft.quiz.length }}, а в файле уровня {{ level.quiz.length }}: для репозитория скачайте и JSON уровня,
-        и индекс направлений (в нём <code>quizCount</code>).
+        Сейчас вариантов {{ draft.variants.length }} по {{ draft.variants[0]?.length ?? 0 }} вопросов, а в файле уровня
+        {{ level.quizVariants.length }} по {{ fileQuizCount }}: для репозитория скачайте и JSON уровня, и индекс направлений
+        (в нём <code>quizCount</code> и <code>quizVariants</code>).
       </p>
       <Message v-if="status" :severity="status.severity" size="small" closable @close="status = null">{{ status.text }}</Message>
       <div class="quiz-editor__actions">

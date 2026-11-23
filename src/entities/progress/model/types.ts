@@ -7,6 +7,12 @@ export type LevelProgress = {
   attempts: number
   /** ISO-дата первого результата >= PASS_SCORE. */
   passedAt: string | null
+  /** Номера вариантов теста (с 0), пройденных в текущем круге; когда пройдены все, круг начинается заново. */
+  variantsTaken: number[]
+  /** Вариант последнего проверенного теста: новый круг начинается не с него. */
+  lastVariant: number | null
+  /** Вариант начатого и ещё не проверенного теста: обновление страницы не меняет вопросы. */
+  activeVariant: number | null
 }
 
 export type LastVisited = { levelId: string; step: number | 'quiz' }

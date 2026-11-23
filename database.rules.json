@@ -50,6 +50,9 @@
           "topicTitle": {
             ".validate": "newData.isString() && newData.val().length <= 300"
           },
+          "quizVariant": {
+            ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 100"
+          },
           "questionIndex": {
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
           },

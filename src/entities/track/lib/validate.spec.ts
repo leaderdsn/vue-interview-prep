@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { answerLengthHint, answerLengthIssues, levelIssues, MAX_TOPICS, questionIssues, quizIssues, topicsIssues } from './validate'
+import {
+  answerLengthHint,
+  answerLengthIssues,
+  levelIssues,
+  MAX_QUIZ_VARIANTS,
+  MAX_TOPICS,
+  questionIssues,
+  quizIssues,
+  quizVariantsIssues,
+  topicsIssues,
+} from './validate'
 
 import type { Level, QuizQuestion } from '../model/types'
 
@@ -81,7 +91,7 @@ describe('levelIssues', () => {
         { title: 'Основы', html: '<p>Текст</p>' },
         { title: 'Шаблоны', html: ' ' },
       ],
-      quiz: [question],
+      quizVariants: [[question]],
     }
 
     expect(levelIssues(level)).toEqual(['Тема 2: пустой заголовок или текст'])
@@ -132,5 +142,43 @@ describe('answerLengthIssues', () => {
     const quiz = [make(30), make(8), make(8), make(12)]
 
     expect(answerLengthIssues(quiz)).toContain('Вопрос 1: верный вариант заметно длиннее остальных — его легко угадать по длине')
+  })
+})
+
+describe('quizVariantsIssues', () => {
+  const ask = (topic: number, text: string): QuizQuestion => ({ topic, type: 'theory', question: text, options: ['1', '2', '3', '4'], answer: 0, explanation: 'Так.' })
+  const first = [ask(0, 'Первый?'), ask(1, 'Второй?')]
+  const second = [ask(1, 'Третий?'), ask(0, 'Четвёртый?')]
+
+  it('с одним вариантом сообщения как у quizIssues', () => {
+    expect(quizVariantsIssues([[{ ...question, explanation: '' }]], 2)).toEqual(quizIssues([{ ...question, explanation: '' }], 2))
+  })
+
+  it('принимает варианты с тем же распределением по темам в любом порядке', () => {
+    expect(quizVariantsIssues([first, second], 2)).toEqual([])
+  })
+
+  it('ошибки вопросов — с номером варианта', () => {
+    expect(quizVariantsIssues([first, [ask(1, 'Третий?'), ask(5, 'Пятый?')]], 2)).toEqual([
+      'Вариант 2. Вопрос 2: тема не выбрана или её нет в уровне',
+    ])
+  })
+
+  it('варианты совпадают по числу вопросов и распределению по темам', () => {
+    expect(quizVariantsIssues([first, [ask(0, 'Третий?')]], 2)).toEqual(['Вариант 2: вопросов 1, а в варианте 1 — 2'])
+    expect(quizVariantsIssues([first, [ask(0, 'Третий?'), ask(0, 'Четвёртый?')]], 2)).toEqual([
+      'Вариант 2: вопросы распределены по темам не так, как в варианте 1',
+    ])
+  })
+
+  it('вопросы не повторяются между вариантами (без учёта регистра и пробелов)', () => {
+    expect(quizVariantsIssues([first, [ask(1, '  второй? '), ask(0, 'Четвёртый?')]], 2)).toEqual([
+      'Вопрос повторяется: вариант 1, вопрос 2 и вариант 2, вопрос 1',
+    ])
+  })
+
+  it(`не больше ${MAX_QUIZ_VARIANTS} вариантов и хотя бы один`, () => {
+    expect(quizVariantsIssues([], 2)).toEqual(['в тесте нет вариантов'])
+    expect(quizVariantsIssues(Array.from({ length: MAX_QUIZ_VARIANTS + 1 }, () => first), 2)[0]).toMatch(/не больше/)
   })
 })

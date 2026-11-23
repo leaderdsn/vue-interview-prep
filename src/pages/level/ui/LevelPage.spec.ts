@@ -26,7 +26,7 @@ function levelWith(count: number): Level {
     trackId: 'vue',
     level: 'junior',
     topics: Array.from({ length: count }, (_, index) => ({ title: `Тема из базы ${index + 1}`, html: `<p>Текст ${index + 1}</p>` })),
-    quiz: [{ topic: 0, type: 'theory', question: 'Вопрос?', options: ['а', 'б', 'в', 'г'], answer: 0, explanation: 'Так.' }],
+    quizVariants: [[{ topic: 0, type: 'theory', question: 'Вопрос?', options: ['а', 'б', 'в', 'г'], answer: 0, explanation: 'Так.' }]],
   }
 }
 

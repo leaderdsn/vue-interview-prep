@@ -10,6 +10,9 @@ const level = (patch: Partial<LevelProgress> = {}): LevelProgress => ({
   lastScore: null,
   attempts: 0,
   passedAt: null,
+  variantsTaken: [],
+  lastVariant: null,
+  activeVariant: null,
   ...patch,
 })
 
@@ -78,7 +81,7 @@ describe('mergeProgress', () => {
 describe('isSameProgress', () => {
   it('не зависит от порядка ключей', () => {
     const a = snapshot({ x: level({ attempts: 1 }), y: level() })
-    const b = snapshot({ y: level(), x: { passedAt: null, attempts: 1, lastScore: null, bestScore: null, seenTopics: [] } })
+    const b = snapshot({ y: level(), x: { activeVariant: null, lastVariant: null, variantsTaken: [], passedAt: null, attempts: 1, lastScore: null, bestScore: null, seenTopics: [] } })
 
     expect(isSameProgress(a, b)).toBe(true)
     expect(isSameProgress(a, snapshot({ x: level({ attempts: 2 }), y: level() }))).toBe(false)

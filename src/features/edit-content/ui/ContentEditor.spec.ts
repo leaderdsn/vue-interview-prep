@@ -34,7 +34,7 @@ const level: Level = {
     { title: 'Первая', html: '<h3>Раздел</h3>\n<p>Текст</p>' },
     { title: 'Вторая', html: '<p>Другая тема</p>' },
   ],
-  quiz: [question(0, 'К первой?'), question(1, 'Ко второй?')],
+  quizVariants: [[question(0, 'К первой?'), question(1, 'Ко второй?')]],
 }
 
 function mountEditor(props: { level?: Level; focus?: EditorFocus | null } = {}) {

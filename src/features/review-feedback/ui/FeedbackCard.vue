@@ -75,7 +75,12 @@ const pageHref = computed(() => `${import.meta.env.BASE_URL.replace(/\/+$/, '')}
 
 const editorTarget = computed<EditorTarget | null>(() =>
   item.levelId && item.step !== undefined
-    ? { levelId: item.levelId, step: item.step, ...(item.questionIndex === undefined ? {} : { questionIndex: item.questionIndex }) }
+    ? {
+        levelId: item.levelId,
+        step: item.step,
+        ...(item.quizVariant === undefined ? {} : { quizVariant: item.quizVariant }),
+        ...(item.questionIndex === undefined ? {} : { questionIndex: item.questionIndex }),
+      }
     : null,
 )
 

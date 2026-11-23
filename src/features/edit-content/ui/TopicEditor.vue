@@ -115,7 +115,7 @@ function deleteTopic() {
 }
 
 /** Вопросы теста, которые объясняет выбранная тема: после её удаления им нужно выбрать другую тему. */
-const linkedQuestions = computed(() => draft.quiz.filter((question) => question.topic === index.value).length)
+const linkedQuestions = computed(() => draft.variants.flat().filter((question) => question.topic === index.value).length)
 
 function discard() {
   draft.discardTopics()

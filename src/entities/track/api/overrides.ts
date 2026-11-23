@@ -1,13 +1,14 @@
 import { sanitizeTopicHtml } from '../lib/sanitize'
-import { isValidQuiz, isValidTopics, quizIssues, topicsIssues } from '../lib/validate'
+import { isValidQuizVariants, isValidTopics, quizVariantsIssues, topicsIssues } from '../lib/validate'
 
 import type { Level, QuizQuestion, Topic } from '../model/types'
 
 /**
  * Правки из админки лежат в Firebase Realtime Database по пути `interviewPrep/content/<levelId>`
  * (читать могут все, писать — администраторы, см. database.rules.json) и заменяют тест и/или темы из сборки.
- * Части записи (`quiz`, `topics`) сохраняются и удаляются независимо друг от друга; если в правке изменилось
+ * Части записи (тест и темы) сохраняются и удаляются независимо друг от друга; если в правке изменилось
  * число или порядок тем, редактор сохраняет обе части одним `update`, чтобы тест не ссылался на чужие темы.
+ * Тест хранится полем `quizVariants` (все варианты); старые записи с одним вариантом в поле `quiz` читаются как раньше.
  */
 export const contentPath = (levelId: string) => `interviewPrep/content/${levelId}`
 
@@ -15,7 +16,8 @@ export const contentPath = (levelId: string) => `interviewPrep/content/${levelId
 export type OverridePart = 'quiz' | 'topics'
 
 export type LevelOverride = {
-  quiz?: QuizQuestion[]
+  /** Все варианты теста. */
+  quizVariants?: QuizQuestion[][]
   topics?: Topic[]
   /** ISO-дата последнего сохранения любой части и кто сохранил. */
   updatedAt: string
@@ -33,15 +35,19 @@ function pickQuestion({ topic, type, question, code, options, answer, explanatio
 
 /**
  * Форма записи из базы; содержимое частей проверяется по уровню в `applyOverride`.
- * Старые записи содержат только `quiz`. Null для всего, что не является правкой (пустой путь, мусор).
+ * Старые записи содержат один вариант теста в поле `quiz`. Null для всего, что не является правкой (пустой путь, мусор).
  */
 export function parseOverride(raw: unknown): LevelOverride | null {
   if (!isRecord(raw)) return null
-  const quiz = Array.isArray(raw.quiz) ? (raw.quiz as QuizQuestion[]) : undefined
+  const quizVariants = Array.isArray(raw.quizVariants)
+    ? (raw.quizVariants as QuizQuestion[][])
+    : Array.isArray(raw.quiz)
+      ? [raw.quiz as QuizQuestion[]]
+      : undefined
   const topics = Array.isArray(raw.topics) ? (raw.topics as Topic[]) : undefined
-  if (!quiz && !topics) return null
+  if (!quizVariants && !topics) return null
   return {
-    ...(quiz ? { quiz } : {}),
+    ...(quizVariants ? { quizVariants } : {}),
     ...(topics ? { topics } : {}),
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : '',
     updatedBy: typeof raw.updatedBy === 'string' ? raw.updatedBy : '',
@@ -88,24 +94,24 @@ export function resolveOverride(level: Level, override: LevelOverride | null): R
     }
   }
 
-  let quiz = level.quiz
+  let quizVariants = level.quizVariants
   let quizApplied = false
-  if (override.quiz) {
-    if (isValidQuiz(override.quiz, topics.length)) {
-      quiz = override.quiz.map(pickQuestion)
+  if (override.quizVariants) {
+    if (isValidQuizVariants(override.quizVariants, topics.length)) {
+      quizVariants = override.quizVariants.map((quiz) => quiz.map(pickQuestion))
       quizApplied = true
     } else {
-      issues.push(`тест не применён: ${quizIssues(override.quiz, topics.length).join('; ')}`)
+      issues.push(`тест не применён: ${quizVariantsIssues(override.quizVariants, topics.length).join('; ')}`)
     }
   }
 
-  if (topicsApplied && !quizApplied && !isValidQuiz(level.quiz, topics.length)) {
+  if (topicsApplied && !quizApplied && !isValidQuizVariants(level.quizVariants, topics.length)) {
     issues.push(`тест из сборки ссылается на темы, которых нет среди ${topics.length} тем правки, — темы тоже не применены`)
     return { level, topicsApplied: false, quizApplied: false, issues }
   }
 
   return {
-    level: topicsApplied || quizApplied ? { ...level, topics, quiz } : level,
+    level: topicsApplied || quizApplied ? { ...level, topics, quizVariants } : level,
     topicsApplied,
     quizApplied,
     issues,

@@ -18,9 +18,9 @@ const TRACKS: Track[] = [
     description: 'Фреймворк',
     category: 'vue',
     levels: [
-      { id: 'vue-junior', level: 'junior', description: 'Основы', topicTitles: TOPICS, quizCount: 12 },
-      { id: 'vue-middle', level: 'middle', description: 'Глубже', topicTitles: TOPICS, quizCount: 12 },
-      { id: 'vue-senior', level: 'senior', description: 'Архитектура', topicTitles: TOPICS, quizCount: 12 },
+      { id: 'vue-junior', level: 'junior', description: 'Основы', topicTitles: TOPICS, quizCount: 12, quizVariants: 1, access: 'paid', taskCount: 0 },
+      { id: 'vue-middle', level: 'middle', description: 'Глубже', topicTitles: TOPICS, quizCount: 12, quizVariants: 1, access: 'paid', taskCount: 0 },
+      { id: 'vue-senior', level: 'senior', description: 'Архитектура', topicTitles: TOPICS, quizCount: 12, quizVariants: 1, access: 'paid', taskCount: 0 },
     ],
   },
 ]

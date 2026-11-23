@@ -1,4 +1,4 @@
-import { questionIssues } from '@/entities/track'
+import { questionIssues, quizVariantsIssues } from '@/entities/track'
 
 import { createBlock } from './blocks'
 import { moveItem } from './draft'
@@ -23,21 +23,25 @@ export const NEW_TOPIC_TITLE = 'Новая тема'
  */
 export type QuestionDraft = QuizQuestion & { lostTopic?: number }
 
-/** Черновик уровня: темы и тест, номера тем в вопросах — по текущему списку тем черновика. */
-export type LevelDraftState = { topics: TopicDraft[]; quiz: QuestionDraft[] }
+/** Черновик уровня: темы и все варианты теста, номера тем в вопросах — по текущему списку тем черновика. */
+export type LevelDraftState = { topics: TopicDraft[]; variants: QuestionDraft[][] }
 
 /**
  * Переписывает номера тем в вопросах по таблице «старый номер → новый» (null — тема удалена).
- * Вопросы с уже удалённой или неизвестной темой не трогаются.
+ * Вопросы с уже удалённой или неизвестной темой не трогаются. Переписываются все варианты теста.
  */
-function remapQuiz(state: LevelDraftState, next: readonly (number | null)[]): QuestionDraft[] {
-  return state.quiz.map((question) => {
+function remapQuiz(state: LevelDraftState, next: readonly (number | null)[]): QuestionDraft[][] {
+  return state.variants.map((quiz) => remapQuestions(quiz, state.topics, next))
+}
+
+function remapQuestions(quiz: readonly QuestionDraft[], topics: readonly TopicDraft[], next: readonly (number | null)[]): QuestionDraft[] {
+  return quiz.map((question) => {
     if (question.topic < 0 || question.topic >= next.length) return question
     const target = next[question.topic]
     if (target !== null && target !== undefined) {
       return target === question.topic ? question : { ...question, topic: target }
     }
-    const origin = state.topics[question.topic]?.origin ?? question.lostTopic
+    const origin = topics[question.topic]?.origin ?? question.lostTopic
     return { ...question, topic: DELETED_TOPIC, ...(origin === undefined || origin === null ? {} : { lostTopic: origin }) }
   })
 }
@@ -52,7 +56,7 @@ export function insertTopic(state: LevelDraftState, at: number = state.topics.le
   const position = Math.min(Math.max(at, 0), state.topics.length)
   return {
     topics: [...state.topics.slice(0, position), createTopic(), ...state.topics.slice(position)],
-    quiz: remapQuiz(
+    variants: remapQuiz(
       state,
       state.topics.map((_, index) => (index < position ? index : index + 1)),
     ),
@@ -64,7 +68,7 @@ export function removeTopic(state: LevelDraftState, at: number): LevelDraftState
   if (at < 0 || at >= state.topics.length) return state
   return {
     topics: state.topics.filter((_, index) => index !== at),
-    quiz: remapQuiz(
+    variants: remapQuiz(
       state,
       state.topics.map((_, index) => (index === at ? null : index < at ? index : index - 1)),
     ),
@@ -81,7 +85,7 @@ export function moveTopic(state: LevelDraftState, from: number, to: number): Lev
   if (order.every((value, index) => value === index)) return state
   return {
     topics: order.map((index) => state.topics[index] as TopicDraft),
-    quiz: remapQuiz(
+    variants: remapQuiz(
       state,
       state.topics.map((_, index) => order.indexOf(index)),
     ),
@@ -124,4 +128,15 @@ export function quizDraftIssues(quiz: readonly QuizQuestion[], topicCount: numbe
   return quiz.flatMap((question, index) =>
     questionDraftIssues(question, topicCount).map((issue) => `Вопрос ${index + 1}: ${issue}`),
   )
+}
+
+/**
+ * Ошибки всех вариантов черновика: сначала ошибки вопросов (с префиксом «Вариант 2. », если вариантов несколько),
+ * затем правила между вариантами из `quizVariantsIssues` — одинаковое число вопросов, распределение по темам, без повторов.
+ */
+export function variantsDraftIssues(variants: readonly (readonly QuizQuestion[])[], topicCount: number): string[] {
+  if (variants.length === 0) return ['в тесте нет вариантов']
+  if (variants.length === 1) return quizDraftIssues(variants[0] as QuizQuestion[], topicCount)
+  const own = variants.flatMap((quiz, index) => quizDraftIssues(quiz, topicCount).map((issue) => `Вариант ${index + 1}. ${issue}`))
+  return own.length ? own : quizVariantsIssues(variants, topicCount)
 }

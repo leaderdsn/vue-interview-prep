@@ -15,7 +15,10 @@
           "AI-ассистенты в IDE и терминале",
           "Ответственность за AI-код: ревью, тесты, секреты, лицензии"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "ai-middle",
@@ -27,7 +30,10 @@
           "LLM API во Vue-приложении: ключи, стриминг, useChat",
           "Структурированный вывод и tool use"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "ai-senior",
@@ -39,7 +45,10 @@
           "Безопасность и качество: prompt injection, утечки, evals",
           "Внедрение AI в команду: правила, ревью, метрики, риски"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -59,7 +68,10 @@
           "Map и Set: частоты, дубликаты, two sum, анаграммы",
           "Рекурсия и стек: скобки, стек вызовов, рекурсия в итерацию"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "algo-middle",
@@ -71,7 +83,10 @@
           "Графы: BFS и DFS, циклы, топологическая сортировка",
           "Динамическое программирование и мемоизация"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "algo-senior",
@@ -83,7 +98,10 @@
           "Куча и очередь с приоритетом, планировщик задач, top-K",
           "Как решать задачу на live-coding"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -103,7 +121,10 @@
           "Состояния интерфейса: загрузка, пусто, ошибка, успех, disabled, focus",
           "Типографика, цвет, контраст и сетка отступов"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "ux-middle",
@@ -115,7 +136,10 @@
           "Адаптивный UX и навигация: mobile-first, touch targets, жесты",
           "Дизайн-токены и связка Figma и кода"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "ux-senior",
@@ -127,7 +151,10 @@
           "UX-метрики и эксперименты: аналитика, воронки, A/B-тесты, юзабилити-тесты",
           "Инклюзивный UX, локализация и дизайн-ревью с дизайнером"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -147,7 +174,10 @@
           "Файловый роутинг, layouts, NuxtLink и middleware",
           "Получение данных: useFetch, useAsyncData и $fetch"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "nuxt-middle",
@@ -159,7 +189,10 @@
           "Серверная часть: Nitro, server/api, server middleware, runtimeConfig",
           "SEO и обработка ошибок: useHead, useSeoMeta, error.vue, createError"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "nuxt-senior",
@@ -171,7 +204,10 @@
           "Деплой и рантаймы: Node, edge, статика, пресеты Nitro",
           "Архитектура и тестирование большого Nuxt-проекта"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -191,7 +227,10 @@
           "Ветки и слияние: merge, fast-forward, конфликты",
           "Удалённые репозитории и pull request: clone, fetch, pull, push"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "git-middle",
@@ -203,7 +242,10 @@
           "Инструменты: stash, cherry-pick, bisect, blame, worktree",
           "Стратегии ветвления и соглашения: GitHub Flow, trunk-based, Conventional Commits, хуки"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "git-senior",
@@ -215,7 +257,10 @@
           "Переписывание истории и безопасность: force-with-lease, filter-repo, секреты, подпись коммитов",
           "Git в командном процессе: защита веток, merge queue, теги и релизы, CODEOWNERS"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -235,7 +280,10 @@
           "Списки, условия и формы: key, фрагменты, управляемые поля",
           "Эффекты и рефы: useEffect, зависимости, очистка, useRef"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "react-middle",
@@ -247,7 +295,10 @@
           "Свои хуки, Context и useReducer",
           "Данные и формы в React 19: Suspense, use, actions, useOptimistic"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "react-senior",
@@ -259,7 +310,10 @@
           "Архитектура React-приложения: состояние, серверный кэш, границы ошибок",
           "Производительность и тестирование: Profiler, виртуализация, code splitting, Testing Library"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -279,7 +333,10 @@
           "Server и Client Components: use client, границы, что где выполняется",
           "Получение данных: fetch в Server Components, loading.tsx и error.tsx"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "next-middle",
@@ -291,7 +348,10 @@
           "Route Handlers, proxy и переменные окружения",
           "Метаданные, SEO и ошибки: generateMetadata, not-found, error.tsx"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "next-senior",
@@ -303,7 +363,10 @@
           "Деплой и рантаймы: Vercel, self-hosting, standalone, Node и Edge",
           "Архитектура и тестирование: Pages Router, миграции, Next.js против Nuxt"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -323,7 +386,10 @@
           "Redux Toolkit: configureStore, createSlice и Immer",
           "Redux в React: Provider, useSelector, useDispatch"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "redux-middle",
@@ -335,7 +401,10 @@
           "Нормализация состояния: createEntityAdapter и структура стора",
           "RTK Query: запросы, кэш, теги и инвалидация"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "redux-senior",
@@ -347,7 +416,10 @@
           "Производительность и SSR: подписки, батчинг, стор на сервере",
           "Тестирование, DevTools и выбор: Redux против Zustand, MobX и серверного кэша"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -367,7 +439,10 @@
           "MobX в React: observer, локальный и общий стор",
           "Реакции: autorun, reaction, when и их очистка"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "mobx-middle",
@@ -379,7 +454,10 @@
           "Архитектура сторов: RootStore, связи между сторами, Context",
           "computed в деталях, comparer и ловушки observer"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "mobx-senior",
@@ -391,7 +469,10 @@
           "SSR, сериализация и тестирование сторов",
           "MobX против Redux, реактивности Vue и сигналов: выбор и миграции"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -411,7 +492,10 @@
           "Authorization Code Flow с PKCE для SPA",
           "keycloak-js во Vue и React: init, login, logout, токен в запросах"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "keycloak-middle",
@@ -423,7 +507,10 @@
           "Состояние авторизации в сторе: Pinia и MobX",
           "Сессии, выход и безопасность SPA: logout, вкладки, XSS, сторонние cookies"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "keycloak-senior",
@@ -435,7 +522,10 @@
           "Next.js и Keycloak: Auth.js, middleware, Server Components",
           "Федерация, мультитенантность и эксплуатация: brokering, organizations, темы, диагностика"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -455,7 +545,10 @@
           "Сервисы и внедрение зависимостей",
           "Роутер и формы"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "angular-middle",
@@ -467,7 +560,10 @@
           "RxJS в Angular: подписки, связь с сигналами, resource",
           "HTTP-клиент, интерсепторы и ленивая загрузка"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "angular-senior",
@@ -479,7 +575,10 @@
           "Архитектура большого приложения",
           "Тестирование и миграции между версиями"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -499,7 +598,10 @@
           "Селекторы и чтение состояния в компонентах",
           "Effects: запросы и побочные эффекты"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "ngrx-middle",
@@ -511,7 +613,10 @@
           "Entity и нормализация данных",
           "Тестирование стора и эффектов"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "ngrx-senior",
@@ -523,7 +628,10 @@
           "Производительность и отладка: DevTools, мемоизация, runtime checks",
           "NgRx и альтернативы: NGXS, Elf, сигналы без библиотек"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -543,7 +651,10 @@
           "Запуск контейнеров: порты, переменные, тома, логи",
           "Docker Compose для локальной разработки"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "docker-middle",
@@ -555,7 +666,10 @@
           "Compose всерьёз: сети, healthcheck, depends_on, профили, override-файлы",
           "Данные и конфигурация: тома, секреты, .env"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "docker-senior",
@@ -567,7 +681,10 @@
           "Продакшен на одном сервере: reverse proxy, TLS, обновление и откат",
           "Отладка и эксплуатация контейнеров, путь к Kubernetes"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   },
@@ -587,7 +704,10 @@
           "Проверки фронтенда в CI: lint, типы, тесты, сборка",
           "Деплой статического сайта: GitHub Pages и превью веток"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "free",
+        "taskCount": 0
       },
       {
         "id": "cicd-middle",
@@ -599,7 +719,10 @@
           "Переиспользование: reusable workflows, composite actions, include и компоненты GitLab",
           "Ветки и релизы: окружения, теги, SemVer, changelog"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       },
       {
         "id": "cicd-senior",
@@ -611,7 +734,10 @@
           "Скорость и стоимость CI: монорепо, affected-сборки, удалённый кэш",
           "Надёжность релизов: метрики DORA, мониторинг, работа с инцидентами"
         ],
-        "quizCount": 12
+        "quizCount": 12,
+        "quizVariants": 1,
+        "access": "paid",
+        "taskCount": 0
       }
     ]
   }

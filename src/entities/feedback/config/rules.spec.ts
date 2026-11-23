@@ -292,6 +292,15 @@ describe('database.rules.json: замечания', () => {
     expect(attempt({ step: 'quiz', questionIndex: 3, email: 'me@example.com' })).toBe(true)
   })
 
+  it('номер варианта теста: с 1 (у первого варианта поле не пишется)', () => {
+    const attempt = (overrides: Record<string, unknown>) =>
+      createDb().update(anonymous('a1'), submission('f1', 'a1', overrides))
+
+    expect(attempt({ step: 'quiz', quizVariant: 2, questionIndex: 3 })).toBe(true)
+    expect(attempt({ step: 'quiz', quizVariant: 0 })).toBe(false)
+    expect(attempt({ step: 'quiz', quizVariant: 'два' })).toBe(false)
+  })
+
   it('автор не может переписать или удалить отправленное', () => {
     const db = createDb()
     db.update(anonymous('a1'), submission('f1', 'a1'))

@@ -2,5 +2,7 @@
 export type EditorTarget = {
   levelId: string
   step: number | 'quiz'
+  /** Номер варианта теста (с 0), если не первый. */
+  quizVariant?: number
   questionIndex?: number
 }

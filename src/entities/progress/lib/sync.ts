@@ -39,6 +39,10 @@ function mergeLevel(local: LevelProgress, remote: LevelProgress): LevelProgress 
     lastScore: remote.attempts > local.attempts ? remote.lastScore : local.lastScore,
     attempts: Math.max(local.attempts, remote.attempts),
     passedAt: earliestDate(local.passedAt, remote.passedAt),
+    variantsTaken: [...new Set([...local.variantsTaken, ...remote.variantsTaken])].sort((a, b) => a - b),
+    lastVariant: remote.attempts > local.attempts ? remote.lastVariant : (local.lastVariant ?? remote.lastVariant),
+    // начатый тест принадлежит этому устройству
+    activeVariant: local.activeVariant ?? remote.activeVariant,
   }
 }
 

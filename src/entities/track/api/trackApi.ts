@@ -3,9 +3,11 @@ import extraTracks from '../data/tracks-extra.json'
 
 import { fetchPublicData } from '@/shared/lib'
 
+import { normalizeLevel } from '../lib/level'
+
 import { applyOverride, contentPath, parseOverride } from './overrides'
 
-import type { Level, LevelName, LevelSummary, Track, TrackCategory } from '../model/types'
+import type { Level, LevelFile, LevelName, LevelSummary, Track, TrackCategory } from '../model/types'
 
 /** Файл индекса направлений в `data/`: для кнопки «Скачать индекс направлений» в редакторе. */
 export type TrackIndexFile = {
@@ -44,7 +46,7 @@ export const LEVEL_LABELS: Readonly<Record<LevelName, string>> = {
 }
 
 // Каждый уровень — отдельный чанк: главная загружает только индекс выше.
-const levelModules = import.meta.glob<Level>('../data/levels/*.json', { import: 'default' })
+const levelModules = import.meta.glob<LevelFile>('../data/levels/*.json', { import: 'default' })
 
 export function findLevel(levelId: string): { track: Track; level: LevelSummary } | null {
   for (const track of TRACKS) {
@@ -58,7 +60,7 @@ export function findLevel(levelId: string): { track: Track; level: LevelSummary 
 export async function fetchBundledLevel(levelId: string): Promise<Level> {
   const load = levelModules[`../data/levels/${levelId}.json`]
   if (!load) throw new Error(`Уровень «${levelId}» не найден`)
-  return load()
+  return normalizeLevel(await load())
 }
 
 /**

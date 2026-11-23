@@ -28,11 +28,17 @@ const question = (topic: number): QuizQuestion => ({
 const published = ['А', 'Б', 'В'].map((title) => ({ title, html: `<p>${title}</p>` }))
 
 function state(): LevelDraftState {
-  return { topics: createTopicDrafts(published), quiz: [question(0), question(1), question(2), question(1)] }
+  return {
+    topics: createTopicDrafts(published),
+    variants: [
+      [question(0), question(1), question(2), question(1)],
+      [question(2), question(0), question(1), question(1)],
+    ],
+  }
 }
 
 const titles = (value: LevelDraftState) => value.topics.map((topic) => topic.title)
-const topicsOf = (value: LevelDraftState) => value.quiz.map((item) => item.topic)
+const topicsOf = (value: LevelDraftState, variant = 0) => (value.variants[variant] ?? []).map((item) => item.topic)
 
 describe('структура тем', () => {
   it('вставка темы сдвигает вопросы к темам после неё', () => {
@@ -41,6 +47,13 @@ describe('структура тем', () => {
     expect(titles(next)).toEqual(['А', NEW_TOPIC_TITLE, 'Б', 'В'])
     expect(next.topics[1]?.origin).toBeNull()
     expect(topicsOf(next)).toEqual([0, 2, 3, 2])
+  })
+
+  it('номера тем пересчитываются во всех вариантах теста', () => {
+    const removed = removeTopic(state(), 1)
+
+    expect(topicsOf(removed, 1)).toEqual([1, 0, DELETED_TOPIC, DELETED_TOPIC])
+    expect(topicsOf(moveTopic(state(), 0, 2), 1)).toEqual([1, 2, 0, 0])
   })
 
   it('по умолчанию тема добавляется в конец, номера вопросов не меняются', () => {
@@ -55,7 +68,7 @@ describe('структура тем', () => {
 
     expect(titles(next)).toEqual(['А', 'В'])
     expect(topicsOf(next)).toEqual([0, DELETED_TOPIC, 1, DELETED_TOPIC])
-    expect(next.quiz[1]?.lostTopic).toBe(1)
+    expect(next.variants[0]?.[1]?.lostTopic).toBe(1)
   })
 
   it('перестановка темы переносит вопросы вместе с ней', () => {
@@ -80,14 +93,14 @@ describe('структура тем', () => {
 
     expect(titles(changed)).toEqual([NEW_TOPIC_TITLE, 'В', 'Б'])
     expect(topicsOf(changed)).toEqual([DELETED_TOPIC, 2, 1, 2])
-    expect(quizToPublished(changed.quiz, changed.topics).map((item) => item.topic)).toEqual([0, 1, 2, 1])
+    expect(quizToPublished(changed.variants[0]!, changed.topics).map((item) => item.topic)).toEqual([0, 1, 2, 1])
   })
 
   it('вопрос, перенесённый на новую тему, при отмене тем остаётся без темы', () => {
     const added = insertTopic(state())
-    const moved = { ...added, quiz: added.quiz.map((item, index) => (index === 0 ? { ...item, topic: 3 } : item)) }
+    const quiz = added.variants[0]!.map((item, index) => (index === 0 ? { ...item, topic: 3 } : item))
 
-    expect(quizToPublished(moved.quiz, moved.topics)[0]?.topic).toBe(DELETED_TOPIC)
+    expect(quizToPublished(quiz, added.topics)[0]?.topic).toBe(DELETED_TOPIC)
   })
 
   it('опубликованный тест переводится в номера тем черновика', () => {

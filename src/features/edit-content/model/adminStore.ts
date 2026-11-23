@@ -51,10 +51,12 @@ export const useAdminStore = defineStore('admin', () => {
    * Темы и тест вместе сохраняются, когда изменилась структура тем: номера тем в вопросах уже пересчитаны,
    * и в базе не должно оказаться теста, ссылающегося на чужие темы. Возвращает запись целиком, как она теперь лежит в базе.
    */
-  async function saveParts(levelId: string, parts: Partial<Pick<LevelOverride, OverridePart>>): Promise<LevelOverride> {
+  async function saveParts(levelId: string, parts: Partial<Pick<LevelOverride, 'quizVariants' | 'topics'>>): Promise<LevelOverride> {
     const { db, dbApi } = await loadFirebase()
     await dbApi.update(dbApi.ref(db, contentPath(levelId)), {
       ...parts,
+      // Старое поле с одним вариантом теста удаляется, как только сохраняются варианты: иначе было бы два источника.
+      ...(parts.quizVariants ? { quiz: null } : {}),
       updatedAt: new Date().toISOString(),
       updatedBy: session.user?.email ?? '',
     })
@@ -64,8 +66,11 @@ export const useAdminStore = defineStore('admin', () => {
   }
 
   /** finalizeQuiz убирает реактивные прокси, служебные поля черновика и поля undefined, которые база не принимает. */
-  function saveQuiz(levelId: string, quiz: readonly QuizQuestion[]): Promise<LevelOverride> {
-    return saveParts(levelId, { quiz: finalizeQuiz(quiz) })
+  const plainVariants = (variants: readonly (readonly QuizQuestion[])[]) => variants.map((quiz) => finalizeQuiz(quiz))
+
+  /** Все варианты теста. */
+  function saveQuiz(levelId: string, variants: readonly (readonly QuizQuestion[])[]): Promise<LevelOverride> {
+    return saveParts(levelId, { quizVariants: plainVariants(variants) })
   }
 
   const plainTopics = (topics: readonly Topic[]) => topics.map(({ title, html }) => ({ title, html }))
@@ -76,8 +81,12 @@ export const useAdminStore = defineStore('admin', () => {
   }
 
   /** Темы и тест одним запросом — при добавлении, удалении или перестановке тем. */
-  function saveTopicsAndQuiz(levelId: string, topics: readonly Topic[], quiz: readonly QuizQuestion[]): Promise<LevelOverride> {
-    return saveParts(levelId, { topics: plainTopics(topics), quiz: finalizeQuiz(quiz) })
+  function saveTopicsAndQuiz(
+    levelId: string,
+    topics: readonly Topic[],
+    variants: readonly (readonly QuizQuestion[])[],
+  ): Promise<LevelOverride> {
+    return saveParts(levelId, { topics: plainTopics(topics), quizVariants: plainVariants(variants) })
   }
 
   /**
@@ -87,10 +96,15 @@ export const useAdminStore = defineStore('admin', () => {
   async function resetPart(levelId: string, part: OverridePart | 'all'): Promise<LevelOverride | null> {
     const { db, dbApi } = await loadFirebase()
     const current = part === 'all' ? null : await loadOverride(levelId)
-    const keepsOther = part !== 'all' && Boolean(current?.[part === 'quiz' ? 'topics' : 'quiz'])
-    const path = keepsOther ? `${contentPath(levelId)}/${part}` : contentPath(levelId)
-    await dbApi.remove(dbApi.ref(db, path))
-    return keepsOther ? loadOverride(levelId) : null
+    const keepsOther = part !== 'all' && Boolean(current?.[part === 'quiz' ? 'topics' : 'quizVariants'])
+    if (!keepsOther) {
+      await dbApi.remove(dbApi.ref(db, contentPath(levelId)))
+      return null
+    }
+    // Тест может лежать и в новом поле `quizVariants`, и в старом `quiz` — удаляются оба.
+    const fields = part === 'quiz' ? { quiz: null, quizVariants: null } : { topics: null }
+    await dbApi.update(dbApi.ref(db, contentPath(levelId)), fields)
+    return loadOverride(levelId)
   }
 
   return { isAdmin, loadOverride, saveQuiz, saveTopics, saveTopicsAndQuiz, resetPart }

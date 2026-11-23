@@ -96,11 +96,11 @@ describe('useAdminStore', () => {
     signIn('u1')
     const admin = useAdminStore()
 
-    const saved = await admin.saveQuiz('vue-junior', [question])
+    const saved = await admin.saveQuiz('vue-junior', [[question]])
 
     expect(record()?.['vue-junior']).toEqual(saved)
     expect(saved.updatedBy).toBe('admin@example.com')
-    expect(saved.quiz?.[0]).not.toHaveProperty('code')
+    expect(saved.quizVariants?.[0]?.[0]).not.toHaveProperty('code')
     expect(await admin.loadOverride('vue-junior')).toEqual(saved)
 
     expect(await admin.resetPart('vue-junior', 'quiz')).toBeNull()
@@ -111,28 +111,28 @@ describe('useAdminStore', () => {
     signIn('u1')
     const admin = useAdminStore()
 
-    await admin.saveQuiz('vue-junior', [question])
+    await admin.saveQuiz('vue-junior', [[question]])
     const saved = await admin.saveTopics('vue-junior', topics)
 
     expect(saved.topics).toEqual(topics)
-    expect(saved.quiz).toHaveLength(1)
+    expect(saved.quizVariants).toHaveLength(1)
 
-    const again = await admin.saveQuiz('vue-junior', [{ ...question, question: 'Другой?' }])
+    const again = await admin.saveQuiz('vue-junior', [[{ ...question, question: 'Другой?' }]])
 
     expect(again.topics).toEqual(topics)
-    expect(again.quiz?.[0]?.question).toBe('Другой?')
+    expect(again.quizVariants?.[0]?.[0]?.question).toBe('Другой?')
   })
 
   it('сброс тем оставляет тест, а сброс последней части удаляет запись', async () => {
     signIn('u1')
     const admin = useAdminStore()
-    await admin.saveQuiz('vue-junior', [question])
+    await admin.saveQuiz('vue-junior', [[question]])
     await admin.saveTopics('vue-junior', topics)
 
     const rest = await admin.resetPart('vue-junior', 'topics')
 
     expect(rest).not.toHaveProperty('topics')
-    expect(rest?.quiz).toHaveLength(1)
+    expect(rest?.quizVariants).toHaveLength(1)
 
     await admin.resetPart('vue-junior', 'quiz')
 
@@ -144,17 +144,17 @@ describe('useAdminStore', () => {
     const admin = useAdminStore()
     const three: Topic[] = [...topics, { title: 'Вторая', html: '<p>2</p>' }, { title: 'Третья', html: '<p>3</p>' }]
 
-    const saved = await admin.saveTopicsAndQuiz('vue-junior', three, [{ ...question, topic: 2 }])
+    const saved = await admin.saveTopicsAndQuiz('vue-junior', three, [[{ ...question, topic: 2 }]])
 
     expect(saved.topics).toHaveLength(3)
-    expect(saved.quiz?.[0]?.topic).toBe(2)
+    expect(saved.quizVariants?.[0]?.[0]?.topic).toBe(2)
     expect(saved.updatedBy).toBe('admin@example.com')
   })
 
   it('сброс всей записи удаляет обе части', async () => {
     signIn('u1')
     const admin = useAdminStore()
-    await admin.saveTopicsAndQuiz('vue-junior', topics, [question])
+    await admin.saveTopicsAndQuiz('vue-junior', topics, [[question]])
 
     expect(await admin.resetPart('vue-junior', 'all')).toBeNull()
     expect(record()).not.toHaveProperty('vue-junior')
@@ -166,7 +166,25 @@ describe('useAdminStore', () => {
 
     const current = await admin.loadOverride('vue-junior')
 
-    expect(current?.quiz).toHaveLength(1)
+    expect(current?.quizVariants).toEqual([[question]])
     expect(current).not.toHaveProperty('topics')
+  })
+
+  it('сохранение вариантов удаляет старое поле quiz, сброс теста — оба поля', async () => {
+    signIn('u1')
+    db.root = { interviewPrep: { content: { 'vue-junior': { quiz: [question], topics, updatedAt: 'd', updatedBy: 'u' } } } }
+    const admin = useAdminStore()
+
+    await admin.saveQuiz('vue-junior', [[question], [{ ...question, question: 'Второй?' }]])
+
+    expect(record()?.['vue-junior']).not.toHaveProperty('quiz')
+    expect((await admin.loadOverride('vue-junior'))?.quizVariants).toHaveLength(2)
+
+    db.root = { interviewPrep: { content: { 'vue-junior': { quiz: [question], topics, updatedAt: 'd', updatedBy: 'u' } } } }
+    const rest = await admin.resetPart('vue-junior', 'quiz')
+
+    expect(rest).not.toHaveProperty('quizVariants')
+    expect(record()?.['vue-junior']).not.toHaveProperty('quiz')
+    expect(rest?.topics).toEqual(topics)
   })
 })

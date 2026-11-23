@@ -16,14 +16,28 @@ const LEVEL: Level = {
     { title: 'Первая', html: '<p>1</p>' },
     { title: 'Вторая', html: '<p>2</p>' },
   ],
-  quiz: [
-    { topic: 0, type: 'theory', question: 'Первый?', options: ['да', 'нет'], answer: 0, explanation: 'Потому что да' },
-    { topic: 1, type: 'practice', question: 'Второй?', code: 'const a = 1', options: ['x', 'y', 'z'], answer: 2, explanation: 'Потому что z' },
+  quizVariants: [
+    [
+      { topic: 0, type: 'theory', question: 'Первый?', options: ['да', 'нет'], answer: 0, explanation: 'Потому что да' },
+      { topic: 1, type: 'practice', question: 'Второй?', code: 'const a = 1', options: ['x', 'y', 'z'], answer: 2, explanation: 'Потому что z' },
+    ],
   ],
 }
 
-function mountRunner() {
-  return mount(QuizRunner, { props: { level: LEVEL } })
+/** Тот же уровень с двумя вариантами: во втором другие вопросы. */
+const TWO_VARIANTS: Level = {
+  ...LEVEL,
+  quizVariants: [
+    LEVEL.quizVariants[0]!,
+    [
+      { topic: 0, type: 'theory', question: 'Третий?', options: ['да', 'нет'], answer: 1, explanation: 'Потому что нет' },
+      { topic: 1, type: 'practice', question: 'Четвёртый?', options: ['x', 'y', 'z'], answer: 0, explanation: 'Потому что x' },
+    ],
+  ],
+}
+
+function mountRunner(level: Level = LEVEL) {
+  return mount(QuizRunner, { props: { level } })
 }
 
 function pick(wrapper: ReturnType<typeof mountRunner>, question: string, optionText: string) {
@@ -117,5 +131,39 @@ describe('QuizRunner', () => {
     expect(wrapper.find('.quiz-result').exists()).toBe(false)
     expect(wrapper.findAll('input:checked')).toHaveLength(0)
     expect(wrapper.findAll('fieldset')).toHaveLength(2)
+  })
+  describe('варианты теста', () => {
+    const variantQuestions = (wrapper: ReturnType<typeof mountRunner>) =>
+      wrapper.findAll('.question__text').map((item) => item.text()).sort()
+
+    it('показывает номер варианта; обновление страницы до проверки не меняет вопросы', () => {
+      const first = mountRunner(TWO_VARIANTS)
+      const shown = variantQuestions(first)
+      const variant = useProgressStore().getLevel('vue-junior').activeVariant
+
+      expect(first.text()).toMatch(/Вариант [12] из 2/)
+      expect(variant).not.toBeNull()
+      first.unmount()
+
+      expect(variantQuestions(mountRunner(TWO_VARIANTS))).toEqual(shown)
+    })
+
+    it('после проверки «Пройти заново» даёт другой вариант и отдаёт его номер действиям страницы', async () => {
+      const wrapper = mount(QuizRunner, {
+        props: { level: TWO_VARIANTS },
+        slots: { 'question-actions': '<template #question-actions="{ variant }"><span class="action">v{{ variant }}</span></template>' },
+      })
+      const before = variantQuestions(wrapper)
+      await button(wrapper, 'Проверить').trigger('click')
+      await button(wrapper, 'Проверить').trigger('click')
+
+      const progress = useProgressStore().getLevel('vue-junior')
+      expect(progress.variantsTaken).toHaveLength(1)
+      expect(wrapper.find('.action').text()).toBe(`v${progress.lastVariant}`)
+
+      await wrapper.findAll('button').find((item) => item.text() === 'Пройти заново')!.trigger('click')
+
+      expect(variantQuestions(wrapper)).not.toEqual(before)
+    })
   })
 })

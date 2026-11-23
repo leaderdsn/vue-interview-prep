@@ -12,6 +12,9 @@ const validLevel = {
   lastScore: 70,
   attempts: 2,
   passedAt: '2026-01-01T00:00:00.000Z',
+  variantsTaken: [1],
+  lastVariant: 1,
+  activeVariant: null,
 }
 
 describe('useProgressStore', () => {
@@ -29,8 +32,64 @@ describe('useProgressStore', () => {
       lastScore: null,
       attempts: 0,
       passedAt: null,
+      variantsTaken: [],
+      lastVariant: null,
+      activeVariant: null,
     })
     expect(store.levels).toEqual({})
+  })
+
+  describe('варианты теста', () => {
+    // Случайность фиксируется: всегда первый кандидат.
+    const first = () => 0
+
+    it('с одним вариантом всегда отдаёт первый и не создаёт запись', () => {
+      const store = useProgressStore()
+
+      expect(store.startQuiz('vue-middle', 1)).toBe(0)
+      expect(store.levels).toEqual({})
+    })
+
+    it('начатый вариант не меняется до проверки, после проверки выбирается непройденный', () => {
+      const store = useProgressStore()
+
+      expect(store.startQuiz('vue-middle', 3, first)).toBe(0)
+      expect(store.startQuiz('vue-middle', 3, () => 0.99)).toBe(0)
+      store.recordQuizResult('vue-middle', 50, 0)
+
+      expect(store.getLevel('vue-middle')).toMatchObject({ variantsTaken: [0], lastVariant: 0, activeVariant: null })
+      expect(store.startQuiz('vue-middle', 3, first)).toBe(1)
+      store.recordQuizResult('vue-middle', 60, 1)
+      expect(store.startQuiz('vue-middle', 3, first)).toBe(2)
+    })
+
+    it('когда пройдены все, начинает новый круг не с последнего варианта', () => {
+      const store = useProgressStore()
+      for (const variant of [0, 1, 2]) {
+        store.startQuiz('vue-middle', 3, first)
+        store.recordQuizResult('vue-middle', 90, variant)
+      }
+
+      // Последним был вариант 2, первый кандидат нового круга — 0; с random около 1 — 1, но не 2.
+      expect(store.startQuiz('vue-middle', 3, () => 0.99)).toBe(1)
+      expect(store.getLevel('vue-middle').variantsTaken).toEqual([])
+    })
+
+    it('выбирает заново, если начатого варианта больше нет', () => {
+      const store = useProgressStore()
+      store.startQuiz('vue-middle', 5, () => 0.99)
+
+      expect(store.getLevel('vue-middle').activeVariant).toBe(4)
+      expect(store.startQuiz('vue-middle', 2, first)).toBe(0)
+    })
+
+    it('читает старый прогресс без полей вариантов', () => {
+      const old = { seenTopics: validLevel.seenTopics, bestScore: 90, lastScore: 70, attempts: 2, passedAt: validLevel.passedAt }
+      localStorage.setItem('vue-interview-prep:progress', JSON.stringify({ version: 1, levels: { a: old }, lastVisited: null }))
+      const store = useProgressStore()
+
+      expect(store.getLevel('a')).toEqual({ ...old, variantsTaken: [], lastVariant: null, activeVariant: null })
+    })
   })
 
   it('отмечает темы как просмотренные без дублей и по порядку', () => {

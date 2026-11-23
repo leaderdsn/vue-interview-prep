@@ -126,11 +126,11 @@ function nextTarget() {
           <template v-if="current === QUIZ_STEP">
             <h2 class="lesson__title">Тест: {{ summary.track.title }}, {{ LEVEL_LABELS[summary.level.level] }}</h2>
             <QuizRunner :key="levelId" :level="level" @review-topic="goTo($event + 1)">
-              <template #question-actions="{ question, questionIndex }">
+              <template #question-actions="{ question, questionIndex, variant }">
                 <FeedbackLink
                   kind="quiz"
                   label="Ошибка в вопросе"
-                  :context="{ levelId, step: QUIZ_STEP, questionIndex, questionText: question.question }"
+                  :context="{ levelId, step: QUIZ_STEP, quizVariant: variant, questionIndex, questionText: question.question }"
                 />
               </template>
             </QuizRunner>

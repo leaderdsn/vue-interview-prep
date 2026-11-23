@@ -135,6 +135,9 @@ describe('describeContext', () => {
   it('коротко описывает место замечания', () => {
     expect(describeContext(draft.context)).toBe('vue-middle · тема 3 «Реактивность»')
     expect(describeContext({ page: '/level/vue-middle/quiz', levelId: 'vue-middle', step: 'quiz', questionIndex: 4 })).toBe('vue-middle · тест, вопрос 5')
+    expect(describeContext({ page: '/level/vue-middle/quiz', levelId: 'vue-middle', step: 'quiz', quizVariant: 2, questionIndex: 0 })).toBe(
+      'vue-middle · тест, вариант 3, вопрос 1',
+    )
     expect(describeContext({ page: '/' })).toBe('Главная страница')
   })
 })

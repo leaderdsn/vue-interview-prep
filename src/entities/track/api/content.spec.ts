@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
+import { normalizeLevel } from '../lib/level'
 import { answerLengthIssues, levelIssues } from '../lib/validate'
 
 import { findIndexFile, TRACK_CATEGORIES, TRACK_INDEX_FILES, TRACKS } from './trackApi'
 
-import type { Level } from '../model/types'
+import type { LevelFile } from '../model/types'
 
 // Контент — JSON, написанный вручную, поэтому его форма проверяется здесь, а не во время работы.
 // Правила для теста общие с редактором (lib/validate.ts).
-const levels = import.meta.glob<Level>('../data/levels/*.json', { import: 'default', eager: true })
+const files = import.meta.glob<LevelFile>('../data/levels/*.json', { import: 'default', eager: true })
+const levels = Object.fromEntries(Object.entries(files).map(([path, file]) => [path, normalizeLevel(file)]))
 
 // Исходный текст файлов индекса: редактор скачивает их заново, и разница должна быть только в правке.
 const rawIndexFiles = import.meta.glob<string>('../data/tracks*.json', { query: '?raw', import: 'default', eager: true })
@@ -20,6 +22,13 @@ describe('контент направлений', () => {
     const files = Object.keys(levels).map((path) => path.replace(/^.*\/(.+)\.json$/, '$1'))
 
     expect(files.sort()).toEqual(summaries.map(({ level }) => level.id).sort())
+  })
+
+  it('Junior бесплатный, Middle и Senior платные; задач пока нет', () => {
+    for (const { level } of summaries) {
+      expect(level.access).toBe(level.level === 'junior' ? 'free' : 'paid')
+      expect(level.taskCount).toBe(0)
+    }
   })
 
   it('у каждого направления известная категория главной', () => {
@@ -35,15 +44,20 @@ describe('контент направлений', () => {
     expect(level.trackId).toBe(track.id)
     expect(level.level).toBe(summary.level)
     expect(level.topics.map((topic) => topic.title)).toEqual(summary.topicTitles)
-    expect(level.quiz).toHaveLength(summary.quizCount)
+    expect(level.quizVariants).toHaveLength(summary.quizVariants)
+    for (const quiz of level.quizVariants) expect(quiz).toHaveLength(summary.quizCount)
     expect(levelIssues(level)).toEqual([])
+    // Один вариант хранится старым полем quiz, несколько — quizVariants (так файлы скачивает редактор).
+    const file = files[`../data/levels/${summary.id}.json`]!
+    expect(Object.keys(file)).toContain(level.quizVariants.length === 1 ? 'quiz' : 'quizVariants')
+    expect(Object.keys(file)).not.toContain(level.quizVariants.length === 1 ? 'quizVariants' : 'quiz')
   })
 
   it.each(summaries)('$level.id: верный ответ не угадывается по длине', ({ level: summary }) => {
     const level = levels[`../data/levels/${summary.id}.json`]
     if (!level) throw new Error(`Нет файла ${summary.id}.json`)
 
-    expect(answerLengthIssues(level.quiz)).toEqual([])
+    for (const quiz of level.quizVariants) expect(answerLengthIssues(quiz)).toEqual([])
   })
 })
 

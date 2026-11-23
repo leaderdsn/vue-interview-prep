@@ -126,7 +126,67 @@ export function answerLengthIssues(quiz: readonly QuizQuestion[]): string[] {
   ]
 }
 
-/** Ошибки собственного контента уровня: темы с текстом и корректный тест. */
+/** Больше вариантов теста у уровня быть не может. */
+export const MAX_QUIZ_VARIANTS = 5
+
+/** Сколько вопросов варианта относится к каждой теме: `{ 0: 3, 1: 3, … }` в виде строки для сравнения. */
+function topicDistribution(quiz: readonly QuizQuestion[]): string {
+  const counts = new Map<number, number>()
+  for (const question of quiz) counts.set(question.topic, (counts.get(question.topic) ?? 0) + 1)
+  return [...counts.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([topic, count]) => `${topic}:${count}`)
+    .join(',')
+}
+
+const normalizeText = (text: string) => text.replace(/\s+/g, ' ').trim().toLowerCase()
+
+/**
+ * Ошибки всех вариантов теста. С одним вариантом сообщения те же, что у `quizIssues`; с несколькими у каждого
+ * сообщения есть префикс «Вариант 2. ». Варианты должны совпадать по числу вопросов и распределению по темам,
+ * а вопросы — не повторяться между вариантами. Позиции верных ответов не проверяются: варианты ответов
+ * перемешиваются при каждом показе.
+ */
+export function quizVariantsIssues(variants: unknown, topicCount: number): string[] {
+  if (!Array.isArray(variants) || variants.length === 0) return ['в тесте нет вариантов']
+  if (variants.length > MAX_QUIZ_VARIANTS) return [`вариантов теста может быть не больше ${MAX_QUIZ_VARIANTS}, а сейчас ${variants.length}`]
+  if (variants.length === 1) return quizIssues(variants[0], topicCount)
+
+  const own = variants.flatMap((quiz, index) => quizIssues(quiz, topicCount).map((issue) => `Вариант ${index + 1}. ${issue}`))
+  if (own.length) return own
+
+  const quizzes = variants as QuizQuestion[][]
+  const [first] = quizzes as [QuizQuestion[], ...QuizQuestion[][]]
+  const issues: string[] = []
+  const expected = topicDistribution(first)
+  quizzes.forEach((quiz, index) => {
+    if (index === 0) return
+    if (quiz.length !== first.length) {
+      issues.push(`Вариант ${index + 1}: вопросов ${quiz.length}, а в варианте 1 — ${first.length}`)
+    } else if (topicDistribution(quiz) !== expected) {
+      issues.push(`Вариант ${index + 1}: вопросы распределены по темам не так, как в варианте 1`)
+    }
+  })
+
+  const seen = new Map<string, string>()
+  quizzes.forEach((quiz, variant) =>
+    quiz.forEach((question, index) => {
+      const key = normalizeText(question.question) + (question.code ? `\n${normalizeText(question.code)}` : '')
+      const place = `вариант ${variant + 1}, вопрос ${index + 1}`
+      const previous = seen.get(key)
+      if (previous && !previous.startsWith(`вариант ${variant + 1},`)) issues.push(`Вопрос повторяется: ${previous} и ${place}`)
+      else if (!previous) seen.set(key, place)
+    }),
+  )
+  return issues
+}
+
+/** Type guard поверх `quizVariantsIssues`. */
+export function isValidQuizVariants(variants: unknown, topicCount: number): variants is QuizQuestion[][] {
+  return quizVariantsIssues(variants, topicCount).length === 0
+}
+
+/** Ошибки собственного контента уровня: темы с текстом и корректные варианты теста. */
 export function levelIssues(level: Level): string[] {
-  return [...topicsIssues(level.topics), ...quizIssues(level.quiz, level.topics.length)]
+  return [...topicsIssues(level.topics), ...quizVariantsIssues(level.quizVariants, level.topics.length)]
 }

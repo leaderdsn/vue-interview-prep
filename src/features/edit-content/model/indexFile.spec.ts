@@ -14,20 +14,25 @@ describe('индекс направлений для репозитория', ()
   })
 
   it.each(TRACK_INDEX_FILES.map((file) => [file.fileName, file] as const))(
-    '%s: меняются только заголовки тем и число вопросов уровня',
+    '%s: меняются только заголовки тем, число вопросов и вариантов уровня',
     (_name, file) => {
       const target = file.tracks[0]?.levels[1]
       if (!target) throw new Error('В индексе нет уровней')
       const topics = [...target.topicTitles, 'Новая тема'].map((title) => ({ title }))
 
-      const text = buildIndexFile(file, target.id, topics, target.quizCount + 1)
+      const text = buildIndexFile(file, target.id, topics, { quizCount: target.quizCount + 1, quizVariants: 3 })
       const tracks = JSON.parse(text) as Track[]
       const changed = tracks.flatMap((track) => track.levels).find((level) => level.id === target.id)
 
-      expect(changed).toEqual({ ...target, topicTitles: [...target.topicTitles, 'Новая тема'], quizCount: target.quizCount + 1 })
+      expect(changed).toEqual({
+        ...target,
+        topicTitles: [...target.topicTitles, 'Новая тема'],
+        quizCount: target.quizCount + 1,
+        quizVariants: 3,
+      })
       // Остальное — как в исходном файле, вместе с форматированием и переводом строки в конце.
       expect(text.endsWith('\n')).toBe(file.trailingNewline)
-      expect(buildIndexFile(file, target.id, target.topicTitles.map((title) => ({ title })), target.quizCount)).toBe(
+      expect(buildIndexFile(file, target.id, target.topicTitles.map((title) => ({ title })), target)).toBe(
         `${JSON.stringify(file.tracks, null, 2)}${file.trailingNewline ? '\n' : ''}`,
       )
       expect(tracks.flatMap((track) => track.levels).filter((level) => level.id !== target.id)).toEqual(

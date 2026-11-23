@@ -31,8 +31,21 @@ export type Level = {
   trackId: string
   level: LevelName
   topics: Topic[]
-  quiz: QuizQuestion[]
+  /**
+   * Варианты теста (от 1 до `MAX_QUIZ_VARIANTS`), в каждом одинаковое число вопросов с тем же распределением по темам.
+   * Пользователь при каждом прохождении получает вариант, который ещё не проходил.
+   */
+  quizVariants: QuizQuestion[][]
 }
+
+/**
+ * Файл уровня в `data/levels`: с одним вариантом теста — старое поле `quiz`, с несколькими — `quizVariants`.
+ * При загрузке приводится к `Level` (`normalizeLevel`).
+ */
+export type LevelFile = Omit<Level, 'quizVariants'> & { quiz?: QuizQuestion[]; quizVariants?: QuizQuestion[][] }
+
+/** Доступ к уровню: Junior бесплатно, Middle и Senior — после оплаты (оплата появится позже, пока открыто всё). */
+export type LevelAccess = 'free' | 'paid'
 
 /** Облегчённые сведения об уровне для списков и прогресса, включаются в бандл сразу. */
 export type LevelSummary = {
@@ -40,7 +53,13 @@ export type LevelSummary = {
   level: LevelName
   description: string
   topicTitles: string[]
+  /** Вопросов в одном варианте теста. */
   quizCount: number
+  /** Сколько вариантов теста. */
+  quizVariants: number
+  access: LevelAccess
+  /** Задач с решением кодом (появятся позже). */
+  taskCount: number
 }
 
 /** Раздел главной страницы, к которому относится направление. */

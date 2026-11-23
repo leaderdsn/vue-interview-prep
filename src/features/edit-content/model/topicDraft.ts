@@ -1,9 +1,9 @@
-import { sanitizeTopicHtml, topicsIssues } from '@/entities/track'
+import { sanitizeTopicHtml, toLevelFile, topicsIssues } from '@/entities/track'
 
 import { BLOCK_LABELS, parseBlocks, serializeBlocks } from './blocks'
 
 import type { Block } from './blocks'
-import type { Level, QuizQuestion, Topic } from '@/entities/track'
+import type { Level, LevelFile, QuizQuestion, Topic } from '@/entities/track'
 
 /**
  * Черновик темы в редакторе: заголовок и блоки текста.
@@ -62,7 +62,10 @@ export function topicDraftIssues(drafts: readonly TopicDraft[]): string[] {
   return [...topicsIssues(finalizeTopics(drafts)), ...blocks]
 }
 
-/** Файл уровня для репозитория: уровень из сборки с текущими темами и тестом из редактора. */
-export function buildLevelFile(level: Level, topics: readonly Topic[], quiz: readonly QuizQuestion[]): Level {
-  return { ...level, topics: [...topics], quiz: [...quiz] }
+/**
+ * Файл уровня для репозитория: уровень из сборки с текущими темами и вариантами теста из редактора.
+ * Один вариант пишется старым полем `quiz`, несколько — полем `quizVariants` (`toLevelFile`).
+ */
+export function buildLevelFile(level: Level, topics: readonly Topic[], variants: readonly (readonly QuizQuestion[])[]): LevelFile {
+  return toLevelFile({ ...level, topics: [...topics], quizVariants: variants.map((quiz) => [...quiz]) })
 }

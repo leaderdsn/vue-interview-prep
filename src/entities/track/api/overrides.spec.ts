@@ -41,11 +41,11 @@ const level: Level = {
     { title: 'Первая', html: '<p>-</p>' },
     { title: 'Вторая', html: '<p>-</p>' },
   ],
-  quiz: [question(0)],
+  quizVariants: [[question(0)]],
 }
 
 const override: LevelOverride = {
-  quiz: [question(1), question(0), { ...question(1), code: 'const a = 1' }],
+  quizVariants: [[question(1), question(0), { ...question(1), code: 'const a = 1' }]],
   updatedAt: '2026-11-12T10:00:00.000Z',
   updatedBy: 'admin@example.com',
 }
@@ -56,7 +56,19 @@ describe('parseOverride', () => {
   })
 
   it('заполняет отсутствующие сведения о сохранении', () => {
-    expect(parseOverride({ quiz: [] })).toEqual({ quiz: [], updatedAt: '', updatedBy: '' })
+    expect(parseOverride({ quizVariants: [] })).toEqual({ quizVariants: [], updatedAt: '', updatedBy: '' })
+  })
+
+  it('читает старую запись с одним вариантом в поле quiz', () => {
+    expect(parseOverride({ quiz: [question(0)], updatedAt: 'd', updatedBy: 'u' })).toEqual({
+      quizVariants: [[question(0)]],
+      updatedAt: 'd',
+      updatedBy: 'u',
+    })
+  })
+
+  it('новое поле quizVariants важнее старого quiz', () => {
+    expect(parseOverride({ quiz: [question(0)], quizVariants: [[question(1)]] })?.quizVariants).toEqual([[question(1)]])
   })
 
   it.each([null, 'x', [], { quiz: 'нет' }, { updatedAt: '2026' }])('не принимает мусор из базы: %j', (raw) => {
@@ -68,14 +80,14 @@ describe('applyOverride', () => {
   it('подставляет корректный тест и оставляет темы из сборки', () => {
     const result = applyOverride(level, override)
 
-    expect(result.quiz).toEqual(override.quiz)
+    expect(result.quizVariants).toEqual(override.quizVariants)
     expect(result.topics).toBe(level.topics)
   })
 
   it('отбрасывает лишние поля вопросов', () => {
-    const result = applyOverride(level, { ...override, quiz: [{ ...question(0), extra: '<script>' } as QuizQuestion] })
+    const result = applyOverride(level, { ...override, quizVariants: [[{ ...question(0), extra: '<script>' } as QuizQuestion]] })
 
-    expect(result.quiz[0]).not.toHaveProperty('extra')
+    expect(result.quizVariants[0]?.[0]).not.toHaveProperty('extra')
   })
 
   it('без правки возвращает уровень из сборки', () => {
@@ -84,10 +96,30 @@ describe('applyOverride', () => {
 
   it('не применяет правку с ошибками', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const broken = { ...override, quiz: [question(5)] }
+    const broken = { ...override, quizVariants: [[question(5)]] }
 
     expect(applyOverride(level, broken)).toBe(level)
     expect(console.warn).toHaveBeenCalled()
+  })
+})
+
+describe('варианты теста в правке', () => {
+  const second = [{ ...question(0), question: 'Новый вопрос по теме 1?' }, { ...question(1), question: 'Другой вопрос по теме 2?' }, { ...question(1), question: 'Ещё один?', code: 'b' }]
+
+  it('применяет все варианты', () => {
+    const variants = [override.quizVariants![0]!, second]
+
+    expect(applyOverride(level, { ...override, quizVariants: variants }).quizVariants).toEqual(variants)
+  })
+
+  it('не применяет варианты с повтором вопроса или другим распределением по темам', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const repeated = resolveOverride(level, { ...override, quizVariants: [override.quizVariants![0]!, override.quizVariants![0]!] })
+    const skewed = resolveOverride(level, { ...override, quizVariants: [override.quizVariants![0]!, second.map((item) => ({ ...item, topic: 0 }))] })
+
+    expect(repeated).toMatchObject({ quizApplied: false, level })
+    expect(repeated.issues[0]).toMatch(/повторяется/)
+    expect(skewed.issues[0]).toMatch(/распределены по темам/)
   })
 })
 
@@ -100,21 +132,21 @@ describe('правка тем', () => {
   })
 
   it('parseOverride читает старую запись только с тестом без поля topics', () => {
-    expect(parseOverride({ quiz: override.quiz, updatedAt: 'd', updatedBy: 'u' })).not.toHaveProperty('topics')
+    expect(parseOverride({ quiz: override.quizVariants?.[0], updatedAt: 'd', updatedBy: 'u' })).not.toHaveProperty('topics')
   })
 
   it('подставляет темы и тест из одной записи', () => {
     const result = applyOverride(level, { ...override, topics })
 
     expect(result.topics).toEqual(topics)
-    expect(result.quiz).toEqual(override.quiz)
+    expect(result.quizVariants).toEqual(override.quizVariants)
   })
 
   it('с правкой только тем оставляет тест из сборки', () => {
     const result = applyOverride(level, { topics, updatedAt: '', updatedBy: '' })
 
     expect(result.topics).toEqual(topics)
-    expect(result.quiz).toBe(level.quiz)
+    expect(result.quizVariants).toBe(level.quizVariants)
   })
 
   it('очищает HTML тем из базы', () => {
@@ -135,7 +167,7 @@ describe('правка тем', () => {
     const result = applyOverride(level, { ...override, topics: broken })
 
     expect(result.topics).toBe(level.topics)
-    expect(result.quiz).toEqual(override.quiz)
+    expect(result.quizVariants).toEqual(override.quizVariants)
     expect(console.warn).toHaveBeenCalled()
   })
 })
@@ -148,25 +180,25 @@ describe('правка с другим числом тем', () => {
   it('применяет темы и тест, если тест ссылается на новые темы', () => {
     const quiz = [question(0), { ...question(1), topic: 2 }]
 
-    const resolved = resolveOverride(level, { topics: three, quiz, ...meta })
+    const resolved = resolveOverride(level, { topics: three, quizVariants: [quiz], ...meta })
 
     expect(resolved).toMatchObject({ topicsApplied: true, quizApplied: true, issues: [] })
     expect(resolved.level.topics).toEqual(three)
-    expect(resolved.level.quiz.map((item) => item.topic)).toEqual([0, 2])
+    expect(resolved.level.quizVariants[0]?.map((item) => item.topic)).toEqual([0, 2])
   })
 
   it('проверяет тест по фактическим темам: вопрос к теме 3 корректен только с правкой тем', () => {
     const quiz = [{ ...question(0), topic: 2 }]
 
-    expect(resolveOverride(level, { quiz, ...meta })).toMatchObject({ quizApplied: false, level })
-    expect(resolveOverride(level, { topics: three, quiz, ...meta })).toMatchObject({ topicsApplied: true, quizApplied: true })
+    expect(resolveOverride(level, { quizVariants: [quiz], ...meta })).toMatchObject({ quizApplied: false, level })
+    expect(resolveOverride(level, { topics: three, quizVariants: [quiz], ...meta })).toMatchObject({ topicsApplied: true, quizApplied: true })
   })
 
   it('без правки теста оставляет тест из сборки, если он подходит к новым темам', () => {
     const resolved = resolveOverride(level, { topics: three, ...meta })
 
     expect(resolved).toMatchObject({ topicsApplied: true, quizApplied: false, issues: [] })
-    expect(resolved.level.quiz).toBe(level.quiz)
+    expect(resolved.level.quizVariants).toBe(level.quizVariants)
   })
 
   it('отбрасывает тест правки, не подходящий к темам, и берёт тест из сборки', () => {
@@ -174,22 +206,22 @@ describe('правка с другим числом тем', () => {
     // Одна тема: вопрос к теме 2 из правки теста не подходит, а тест из сборки (тема 1) подходит.
     const one = [topic('Единственная')]
 
-    const resolved = resolveOverride(level, { topics: one, quiz: [question(1)], ...meta })
+    const resolved = resolveOverride(level, { topics: one, quizVariants: [[question(1)]], ...meta })
 
     expect(resolved).toMatchObject({ topicsApplied: true, quizApplied: false })
     expect(resolved.level.topics).toEqual(one)
-    expect(resolved.level.quiz).toBe(level.quiz)
+    expect(resolved.level.quizVariants).toBe(level.quizVariants)
     expect(resolved.issues[0]).toMatch(/^тест не применён/)
-    expect(applyOverride(level, { topics: one, quiz: [question(1)], ...meta }).topics).toEqual(one)
+    expect(applyOverride(level, { topics: one, quizVariants: [[question(1)]], ...meta }).topics).toEqual(one)
     expect(console.warn).toHaveBeenCalled()
   })
 
   it('если к темам правки не подходит ни тест правки, ни тест из сборки, показывает уровень из сборки целиком', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const withSecond: Level = { ...level, quiz: [question(1)] }
+    const withSecond: Level = { ...level, quizVariants: [[question(1)]] }
     const one = [topic('Единственная')]
 
-    const broken = resolveOverride(withSecond, { topics: one, quiz: [question(1)], ...meta })
+    const broken = resolveOverride(withSecond, { topics: one, quizVariants: [[question(1)]], ...meta })
     const withoutQuiz = resolveOverride(withSecond, { topics: one, ...meta })
 
     expect(broken).toMatchObject({ level: withSecond, topicsApplied: false, quizApplied: false })
@@ -203,7 +235,11 @@ describe('правка с другим числом тем', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const quiz = [{ ...question(0), topic: 2 }]
 
-    const resolved = resolveOverride(level, { topics: [topic('Первая'), { title: '', html: '<p>-</p>' }, topic('Третья')], quiz, ...meta })
+    const resolved = resolveOverride(level, {
+      topics: [topic('Первая'), { title: '', html: '<p>-</p>' }, topic('Третья')],
+      quizVariants: [quiz],
+      ...meta,
+    })
 
     expect(resolved).toMatchObject({ level, topicsApplied: false, quizApplied: false })
     expect(resolved.issues).toHaveLength(2)
@@ -225,16 +261,16 @@ describe('fetchLevel', () => {
     expect(result.id).toBe('vue-junior')
   })
 
-  it('читает правку по REST без SDK и подставляет тест', async () => {
+  it('читает правку по REST без SDK и подставляет тест (старая запись с полем quiz)', async () => {
     firebase.value = { apiKey: 'key', databaseURL: 'https://db.example/' }
     const quiz = [{ ...question(0), question: 'Отредактированный вопрос?' }]
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...override, quiz })))
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ quiz, updatedAt: '', updatedBy: '' })))
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await fetchLevel('vue-junior')
 
     expect(fetchMock).toHaveBeenCalledWith(`https://db.example/${contentPath('vue-junior')}.json`, expect.anything())
-    expect(result.quiz).toEqual(quiz)
+    expect(result.quizVariants).toEqual([quiz])
   })
 
   it('при ошибке сети отдаёт тест из сборки', async () => {
@@ -243,7 +279,7 @@ describe('fetchLevel', () => {
 
     const result = await fetchLevel('vue-junior')
 
-    expect(result.quiz.length).toBeGreaterThan(0)
-    expect(result.quiz[0]?.question).not.toBe('Отредактированный вопрос?')
+    expect(result.quizVariants[0]?.length).toBeGreaterThan(0)
+    expect(result.quizVariants[0]?.[0]?.question).not.toBe('Отредактированный вопрос?')
   })
 })
