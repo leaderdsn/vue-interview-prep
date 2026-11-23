@@ -1,1 +1,845 @@
-{"id":"ts-middle","trackId":"ts","level":"middle","topics":[{"title":"Generics","html":"\n<p>Дженерики (generics, обобщённые типы) — это параметры для типов. Как обычная функция принимает значения через параметры, так дженерик принимает типы. На middle-уровне от вас ждут, что вы уверенно пишете дженерик-функции и интерфейсы, понимаете ограничения через <code>extends</code> и связку <code>keyof</code> с <code>T[K]</code>.</p>\n<h3>Какую проблему решают дженерики</h3>\n<p>Представьте функцию <code>first</code>, которая возвращает первый элемент массива. Без дженериков у вас два плохих варианта. Можно написать отдельную функцию для массива задач, массива пользователей и массива чисел — это дублирование. Можно принять <code>any[]</code> и вернуть <code>any</code> — тогда на выходе теряется вся информация о типе, и опечатка в поле результата не будет поймана.</p>\n<p>Дженерик решает это так: функция объявляет параметр типа <code>T</code> в угловых скобках, и этот <code>T</code> связывает вход и выход. «Что пришло на вход как массив <code>T</code>, то и вернётся как <code>T</code>».</p>\n<pre class=\"code\"><span class=\"c\">// Без дженерика: либо any, либо копия функции под каждый тип</span>\nfunction firstAny(list: any[]): any {\n  return list[0]\n}\n\n<span class=\"c\">// С дженериком: тип результата связан с типом входа</span>\nfunction first&lt;T&gt;(list: T[]): T | undefined {\n  return list[0]\n}\nconst p = first([{ id: 1, title: 'A' }]) <span class=\"c\">// { id: number; title: string } | undefined</span>\nconst n = first&lt;number&gt;([])              <span class=\"c\">// T задан явно</span>\n\n<span class=\"c\">// Дженерик-интерфейс: ответ API с данными любого типа</span>\ninterface ApiResponse&lt;T&gt; {\n  data: T\n  total: number\n  page: number\n}\ninterface Project { id: number; title: string }\n\nasync function getList&lt;T&gt;(url: string): Promise&lt;ApiResponse&lt;T[]&gt;&gt; {\n  const res = await fetch(url)\n  return res.json()  <span class=\"c\">// json() возвращает any — доверяем серверу</span>\n}\nconst projects = await getList&lt;Project&gt;('/api/projects')\nprojects.data[0].title <span class=\"c\">// string</span>\n\n<span class=\"c\">// Значение по умолчанию для параметра типа</span>\ninterface Paginated&lt;T = unknown&gt; { items: T[]; next: string | null }</pre>\n<p>Разберём, что происходит. При вызове <code>first([{ id: 1, title: 'A' }])</code> вы не указываете <code>T</code> — компилятор <b>выводит</b> его из аргумента: <code>T</code> становится <code>{ id: number; title: string }</code>, и результат получает этот же тип. Явно указывать <code>T</code> нужно, когда выводить не из чего: например, пустой массив или функция <code>getList&lt;Project&gt;(url)</code>, у которой тип данных вообще не связан с аргументами.</p>\n<p>Дженерики бывают не только у функций. <code>interface ApiResponse&lt;T&gt;</code> описывает обёртку ответа один раз, а конкретный тип данных подставляется при использовании: <code>ApiResponse&lt;Project[]&gt;</code>, <code>ApiResponse&lt;User&gt;</code>. Так же устроены встроенные типы <code>Array&lt;T&gt;</code>, <code>Promise&lt;T&gt;</code>, <code>Ref&lt;T&gt;</code> во Vue. Параметру типа можно задать значение по умолчанию: <code>Paginated&lt;T = unknown&gt;</code> — если тип не передан, будет <code>unknown</code>.</p>\n<div class=\"note warn\">Ловушка в getList: res.json() возвращает any, и дженерик лишь подписывает результат нужным типом. Это не проверка: если сервер пришлёт другую форму, TypeScript об этом не узнает. Дженерик-обёртка над fetch — удобство, а не гарантия.</div>\n<h3>Ограничения: extends, keyof и T[K]</h3>\n<p>Внутри дженерик-функции о <code>T</code> ничего не известно, поэтому обратиться к <code>item.id</code> нельзя: вдруг <code>T</code> — это число? <b>Ограничение</b> <code>T extends { id: number }</code> говорит: «T может быть любым типом, но у него обязательно есть числовой id». Внутри функции становится доступно <code>item.id</code>, а снаружи компилятор не даст передать массив объектов без id. Важно, что ограничение — это нижняя планка, а не точный тип: если передать массив задач, <code>T</code> будет полноценным типом задачи со всеми полями.</p>\n<p>Оператор <b>keyof</b> превращает тип объекта в union его ключей: для <code>Task</code> это <code>'id' | 'title' | 'done'</code>. А <b>индексный доступ</b> <code>T[K]</code> возвращает тип значения по ключу: <code>Task['title']</code> — это <code>string</code>. Вместе они дают один из самых полезных шаблонов.</p>\n<pre class=\"code\"><span class=\"c\">// Ограничение: T обязан иметь поле id</span>\nfunction byId&lt;T extends { id: number }&gt;(list: T[], id: number): T | undefined {\n  return list.find((item) =&gt; item.id === id)\n}\n\n<span class=\"c\">// keyof — объединение ключей, T[K] — тип значения по ключу</span>\ninterface Task { id: number; title: string; done: boolean }\ntype TaskKey = keyof Task        <span class=\"c\">// 'id' | 'title' | 'done'</span>\ntype TitleType = Task['title']   <span class=\"c\">// string</span>\n\nfunction getField&lt;T, K extends keyof T&gt;(obj: T, key: K): T[K] {\n  return obj[key]\n}\nconst t: Task = { id: 1, title: 'Сверстать', done: false }\ngetField(t, 'done')    <span class=\"c\">// boolean</span>\n<span class=\"c\">// getField(t, 'name') // Ошибка: 'name' не ключ Task</span>\n\n<span class=\"c\">// Сортировка таблицы по колонке — типичный фронтовый пример</span>\nfunction sortBy&lt;T, K extends keyof T&gt;(rows: T[], key: K): T[] {\n  return [...rows].sort((a, b) =&gt; (a[key] &gt; b[key] ? 1 : a[key] &lt; b[key] ? -1 : 0))\n}\nsortBy([t], 'title')</pre>\n<p>В <code>getField&lt;T, K extends keyof T&gt;</code> второй параметр типа ограничен ключами первого. Компилятор выводит <code>T</code> из объекта, <code>K</code> — из строки-ключа, и результат получает точный тип: для <code>'done'</code> это <code>boolean</code>, для <code>'title'</code> — <code>string</code>. Передать несуществующий ключ нельзя. Тот же приём лежит в основе сортировки и фильтрации таблиц по колонке, функции <code>pick</code>, типизированных форм и <code>watch</code> по полю объекта.</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Вызов</b><span>getField(task, done)</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Вывод T</b><span>тип объекта task</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Проверка K</b><span>done входит в keyof T</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Результат</b><span>T[K] = boolean</span></div></div><figcaption>Как компилятор обрабатывает вызов с K extends keyof T</figcaption></figure>\n<h3>Когда дженерик не нужен</h3>\n<p>Частая ошибка — дженерик ради дженерика. Если параметр типа встречается в сигнатуре только один раз, он ничего не связывает и его можно заменить конкретным типом или <code>unknown</code>. Например, <code>function log&lt;T&gt;(value: T): void</code> ничем не лучше <code>function log(value: unknown): void</code>. Правило простое: дженерик оправдан, когда <code>T</code> связывает минимум два места — вход и выход или два аргумента.</p>\n<p>Ещё одна полезная деталь из TS 5.x: модификатор <code>const</code> у параметра типа (<code>function f&lt;const T&gt;(x: T)</code>) заставляет выводить литеральные типы, как если бы аргумент был записан с <code>as const</code>. А утилита <code>NoInfer&lt;T&gt;</code> (TS 5.4) запрещает выводить <code>T</code> из конкретного аргумента — полезно, когда значение по умолчанию должно быть одним из ранее переданных вариантов.</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Дженерик — это параметр типа, который связывает типы входа и выхода, чтобы не терять информацию и не дублировать код. Обычно тип выводится из аргументов. Чтобы обращаться к полям T, его ограничивают через extends. Связка K extends keyof T и возвращаемый T[K] даёт типобезопасный доступ по ключу — так типизируют сортировку таблицы по колонке или pick. Если параметр типа используется один раз, дженерик не нужен.»</div>"},{"title":"Utility types","html":"\n<p>Utility types — встроенные в TypeScript типы-функции, которые строят новый тип из существующего. Их смысл — не описывать одну и ту же сущность пять раз. У пользователя есть модель из API, форма создания без id, форма редактирования, где всё необязательно, строка таблицы с тремя колонками. Если описать каждую вручную, при добавлении поля в модель придётся править пять мест. С утилитами все производные типы обновятся сами.</p>\n<h3>Утилиты для объектов</h3>\n<pre class=\"code\">interface User {\n  id: number\n  name: string\n  email: string\n  role: 'admin' | 'user'\n  avatar?: string\n}\n\n<span class=\"c\">// Форма редактирования: все поля необязательны</span>\ntype UserPatch = Partial&lt;User&gt;\n<span class=\"c\">// Форма создания: без id, его выдаст сервер</span>\ntype UserCreate = Omit&lt;User, 'id'&gt;\n<span class=\"c\">// Строка таблицы: только нужные колонки</span>\ntype UserRow = Pick&lt;User, 'id' | 'name' | 'role'&gt;\n<span class=\"c\">// Профиль после загрузки: avatar гарантированно есть</span>\ntype UserFull = Required&lt;User&gt;\n<span class=\"c\">// Неизменяемая копия из стора</span>\ntype UserView = Readonly&lt;User&gt;\n\n<span class=\"c\">// Record — словарь «ключ → значение»</span>\ntype Role = User['role']\nconst roleLabels: Record&lt;Role, string&gt; = {\n  admin: 'Администратор',\n  user: 'Пользователь', <span class=\"c\">// забыли ключ — ошибка компиляции</span>\n}\nconst usersById: Record&lt;number, User&gt; = {}\n\n<span class=\"c\">// Extract / Exclude / NonNullable работают с union</span>\ntype Status = 'idle' | 'loading' | 'success' | 'error'\ntype Busy = Extract&lt;Status, 'loading'&gt;            <span class=\"c\">// 'loading'</span>\ntype NotIdle = Exclude&lt;Status, 'idle'&gt;            <span class=\"c\">// 'loading' | 'success' | 'error'</span>\ntype Name = NonNullable&lt;string | null | undefined&gt; <span class=\"c\">// string</span></pre>\n<p>Пройдёмся по каждой утилите на примере пользователя:</p>\n<ul>\n  <li><b>Partial&lt;T&gt;</b> делает все поля необязательными. Подходит для PATCH-запроса и для функции <code>updateUser(id, patch)</code>, которая меняет только переданные поля.</li>\n  <li><b>Required&lt;T&gt;</b> — обратная операция: все поля становятся обязательными, и <code>avatar</code> тоже.</li>\n  <li><b>Readonly&lt;T&gt;</b> запрещает присваивание полям. Используется для данных из стора, которые компонент не должен менять напрямую.</li>\n  <li><b>Pick&lt;T, K&gt;</b> оставляет только перечисленные ключи — например, колонки таблицы. <b>Omit&lt;T, K&gt;</b> делает наоборот: убирает перечисленные. Для формы создания удобно <code>Omit&lt;User, 'id'&gt;</code>: id выдаст сервер.</li>\n  <li><b>Record&lt;K, V&gt;</b> описывает словарь, у которого ключи типа <code>K</code>, а значения типа <code>V</code>. Если <code>K</code> — union литералов, Record требует <b>все</b> ключи. Это отличный способ не забыть подпись для нового статуса или роли: добавили роль в union — компилятор потребует добавить её в словарь подписей.</li>\n</ul>\n<div class=\"note warn\">Ловушка: все эти утилиты поверхностные. Partial делает необязательными только поля первого уровня, а вложенные объекты остаются как были. Readonly тоже не защищает вложенные объекты. Для глубоких версий пишут свои рекурсивные типы (DeepPartial) на mapped types — об этом на уровне senior.</div>\n<p>Ещё одна ловушка с Omit: он не проверяет, что убираемый ключ существует. <code>Omit&lt;User, 'idd'&gt;</code> скомпилируется без ошибки и просто вернёт исходный тип. Pick, наоборот, требует существующих ключей.</p>\n<h3>Утилиты для union</h3>\n<p>Три утилиты работают не с полями объекта, а с членами union. <b>Exclude&lt;T, U&gt;</b> убирает из union варианты, совместимые с <code>U</code>: <code>Exclude&lt;Status, 'idle'&gt;</code> — все статусы, кроме idle. <b>Extract&lt;T, U&gt;</b> наоборот оставляет только совместимые. <b>NonNullable&lt;T&gt;</b> убирает <code>null</code> и <code>undefined</code>.</p>\n<p>Частый вопрос на собеседовании: «Чем Omit отличается от Exclude?». Omit работает с ключами объекта и возвращает объект. Exclude работает с union и возвращает union. Внутри Omit, кстати, использует Exclude: <code>Omit&lt;T, K&gt;</code> — это <code>Pick&lt;T, Exclude&lt;keyof T, K&gt;&gt;</code>.</p>\n<div class=\"table-wrap\"><table><thead><tr><th>Утилита</th><th>Работает с</th><th>Пример во фронтенде</th></tr></thead><tbody><tr><td><code>Partial</code>, <code>Required</code>, <code>Readonly</code></td><td>полями объекта</td><td>патч сущности, данные из стора</td></tr><tr><td><code>Pick</code>, <code>Omit</code></td><td>ключами объекта</td><td>строка таблицы, форма создания</td></tr><tr><td><code>Record</code></td><td>ключами и значениями</td><td>подписи статусов, кэш по id</td></tr><tr><td><code>Exclude</code>, <code>Extract</code>, <code>NonNullable</code></td><td>членами union</td><td>статусы без idle, значение без null</td></tr><tr><td><code>ReturnType</code>, <code>Parameters</code>, <code>Awaited</code></td><td>функциями и промисами</td><td>тип ответа API-функции, обёртки</td></tr></tbody></table></div>\n<h3>Утилиты для функций</h3>\n<p>Иногда тип уже «живёт» в функции, а отдельного интерфейса нет: например, функция API возвращает объект, тип которого выведен автоматически, или composable возвращает набор ref. Вместо того чтобы описывать этот тип вручную и следить за синхронизацией, его извлекают.</p>\n<pre class=\"code\"><span class=\"c\">// Типы из функций: не дублируем, а извлекаем</span>\nasync function fetchUser(id: number, withProjects = false) {\n  const res = await fetch(`/api/users/${id}?projects=${withProjects}`)\n  return (await res.json()) as { id: number; name: string; projects?: string[] }\n}\n\ntype FetchUserArgs = Parameters&lt;typeof fetchUser&gt;     <span class=\"c\">// [id: number, withProjects?: boolean]</span>\ntype FetchUserPromise = ReturnType&lt;typeof fetchUser&gt;  <span class=\"c\">// Promise&lt;{...}&gt;</span>\ntype FetchedUser = Awaited&lt;ReturnType&lt;typeof fetchUser&gt;&gt; <span class=\"c\">// { id; name; projects? }</span>\n\n<span class=\"c\">// Обёртка с тем же набором аргументов</span>\nfunction withLog&lt;F extends (...args: any[]) =&gt; any&gt;(fn: F) {\n  return (...args: Parameters&lt;F&gt;): ReturnType&lt;F&gt; =&gt; {\n    console.log('call', args)\n    return fn(...args)\n  }\n}\nconst loggedFetch = withLog(fetchUser) <span class=\"c\">// (id, withProjects?) =&gt; Promise&lt;...&gt;</span></pre>\n<p><b>Parameters&lt;F&gt;</b> возвращает кортеж типов параметров функции. <b>ReturnType&lt;F&gt;</b> — тип результата. У async-функции это промис, поэтому чтобы получить сами данные, добавляют <b>Awaited</b>, который разворачивает промис (и даже вложенный промис) до значения. Обратите внимание на <code>typeof fetchUser</code>: утилиты принимают типы, а <code>fetchUser</code> — значение, поэтому сначала оператором <code>typeof</code> получаем его тип.</p>\n<p>Во Vue этот приём часто используют, чтобы получить тип того, что возвращает composable: <code>type TableState = ReturnType&lt;typeof useTable&gt;</code>. Функция <code>withLog</code> показывает другой сценарий — обёртку, которая принимает и возвращает аргументы ровно того же типа, что и исходная функция.</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Utility types строят производные типы из одной модели, чтобы не дублировать описания. Partial для патчей, Omit для формы создания без id, Pick для строки таблицы, Record для словаря, где нужны все ключи union. Exclude, Extract и NonNullable работают с union, а Omit — с ключами объекта. ReturnType, Parameters и Awaited извлекают типы из функций, например тип ответа API-функции. Важно помнить, что эти утилиты поверхностные.»</div>"},{"title":"Type guards и discriminated unions","html":"\n<p>На junior-уровне мы сужали типы встроенными проверками: <code>typeof</code>, <code>in</code>, <code>instanceof</code>. На middle-уровне нужно уметь две вещи: писать собственные проверки (type guards), которые компилятор понимает так же, как встроенные, и моделировать состояния через discriminated unions, чтобы невозможные комбинации просто не компилировались.</p>\n<h3>Пользовательские type guards</h3>\n<p>Встроенные проверки хороши для примитивов, но не умеют отвечать на вопрос «это объект проекта?». Можно вынести проверку в функцию, но обычная функция, возвращающая <code>boolean</code>, ничего не сообщает компилятору: после <code>if (isProject(data))</code> переменная останется <code>unknown</code>. Чтобы это исправить, у функции пишут особый тип результата — <b>type predicate</b> <code>value is Project</code>. Он означает: «если функция вернула true, то аргумент имеет тип Project».</p>\n<pre class=\"code\">interface Project { id: number; title: string }\n\n<span class=\"c\">// Пользовательский type guard: возвращает boolean, но сообщает компилятору тип</span>\nfunction isProject(value: unknown): value is Project {\n  return (\n    typeof value === 'object' &amp;&amp; value !== null &amp;&amp;\n    'id' in value &amp;&amp; typeof value.id === 'number' &amp;&amp;\n    'title' in value &amp;&amp; typeof value.title === 'string'\n  )\n}\n\nconst data: unknown = await fetch('/api/project/1').then((r) =&gt; r.json())\nif (isProject(data)) {\n  data.title <span class=\"c\">// Project</span>\n}\n\n<span class=\"c\">// Фильтр с отсечением null: с TS 5.5 предикат выводится сам</span>\nconst list = [1, null, 3].filter((x) =&gt; x !== null) <span class=\"c\">// number[]</span>\n\n<span class=\"c\">// asserts — функция либо бросает, либо дальше тип сужен</span>\nfunction assertDefined&lt;T&gt;(value: T, msg: string): asserts value is NonNullable&lt;T&gt; {\n  if (value === null || value === undefined) throw new Error(msg)\n}\nconst el = document.querySelector('.grid') <span class=\"c\">// Element | null</span>\nassertDefined(el, 'Нет контейнера таблицы')\nel.classList.add('ready')                  <span class=\"c\">// Element</span></pre>\n<p>Разберём три идеи из примера. Первая — <code>isProject</code> принимает <code>unknown</code> и последовательно проверяет, что это объект, не null, у него есть поля нужных типов. С TS 4.9 после <code>'id' in value</code> можно обращаться к <code>value.id</code>, поэтому такие проверки пишутся без приведений.</p>\n<p>Вторая — с TS 5.5 компилятор сам выводит предикат у простых стрелочных функций. Раньше <code>[1, null, 3].filter((x) =&gt; x !== null)</code> давал <code>(number | null)[]</code>, и приходилось писать предикат руками. Теперь результат — <code>number[]</code>.</p>\n<p>Третья — <b>assertion function</b> с сигнатурой <code>asserts value is T</code>. Она ничего не возвращает: либо бросает исключение, либо после её вызова компилятор считает тип суженным до конца блока. Это удобно для инвариантов вроде «контейнер таблицы обязан существовать». Важное ограничение: если assertion-функция записана как стрелочная и сохранена в <code>const</code>, у константы должна быть явная аннотация типа, иначе компилятор выдаст ошибку «Assertions require every name in the call target to be declared with an explicit type annotation». С обычным объявлением через <code>function</code> такой проблемы нет.</p>\n<div class=\"note warn\">Главная ловушка type guard: компилятор не проверяет, что тело функции соответствует предикату. Если написать return true, TypeScript поверит и сузит тип. По сути guard — это as, спрятанный в функцию, поэтому проверку внутри нужно писать честно и покрывать тестами.</div>\n<h3>Discriminated unions: моделируем состояния</h3>\n<p>Типичная ошибка в состоянии загрузки — набор независимых полей: <code>loading: boolean</code>, <code>data: T | null</code>, <code>error: string | null</code>. Такой тип допускает бессмысленные комбинации: загрузка идёт и одновременно есть ошибка; данных нет, ошибки нет и загрузка не идёт. В шаблоне приходится писать <code>data!</code> и надеяться, что всё согласовано.</p>\n<p><b>Дискриминированное объединение</b> (tagged union) решает это: каждый вариант состояния — отдельный тип объекта, и у всех есть общее поле-метка с литеральным типом, обычно <code>status</code> или <code>type</code>. Проверка метки сужает весь объект до одного варианта.</p>\n<pre class=\"code\"><span class=\"c\">// Дискриминированное объединение: общее поле-метка status</span>\ntype LoadState&lt;T&gt; =\n  | { status: 'idle' }\n  | { status: 'loading' }\n  | { status: 'success'; data: T }\n  | { status: 'error'; error: string }\n\nfunction render(state: LoadState&lt;string[]&gt;): string {\n  switch (state.status) {\n    case 'idle':\n      return 'Нажмите «Загрузить»'\n    case 'loading':\n      return 'Загрузка…'\n    case 'success':\n      return state.data.join(', ')   <span class=\"c\">// data есть только тут</span>\n    case 'error':\n      return 'Ошибка: ' + state.error\n    default:\n      return assertNever(state)      <span class=\"c\">// все варианты разобраны → state: never</span>\n  }\n}\n\nfunction assertNever(x: never): never {\n  throw new Error('Необработанный вариант: ' + JSON.stringify(x))\n}\n<span class=\"c\">// Добавили { status: 'empty' } — switch перестанет компилироваться</span></pre>\n<p>Внутри <code>case 'success'</code> TypeScript знает, что это вариант с полем <code>data</code>, и разрешает к нему обратиться. Обратиться к <code>state.data</code> в ветке <code>'error'</code> нельзя — там такого поля нет. Невозможные комбинации больше невыразимы.</p>\n<div class=\"boxes\"><div class=\"box bad\"><b>Флаги</b><span>loading, data, error независимы — 8 комбинаций, большая часть бессмысленны, в шаблоне нужны ! и проверки</span></div><div class=\"box good\"><b>Discriminated union</b><span>4 состояния, у каждого свои поля; проверка status сужает тип, лишнего не бывает</span></div></div>\n<h3>Проверка исчерпанности через never</h3>\n<p>Последний элемент мозаики — ветка <code>default</code> с <code>assertNever(state)</code>. Когда все варианты разобраны в <code>case</code>, в <code>default</code> не остаётся ни одного варианта, и тип <code>state</code> там — <code>never</code>. Функция <code>assertNever</code> принимает только <code>never</code>, поэтому вызов компилируется.</p>\n<p>Теперь кто-то добавляет в тип вариант <code>{ status: 'empty' }</code>. В <code>default</code> попадает этот новый вариант, тип становится не <code>never</code>, и вызов <code>assertNever(state)</code> перестаёт компилироваться. Компилятор сам показывает каждое место, где новое состояние не обработано. В рантайме функция бросает исключение — на случай, если сервер прислал неизвестный статус. Тот же эффект даёт <code>const _exhaustive: never = state</code> или ESLint-правило <code>switch-exhaustiveness-check</code>.</p>\n<p>Этот приём применяют не только к состояниям загрузки: типы событий в шине, действия в редьюсере, виды фильтров таблицы, варианты ответа API (<code>{ ok: true; data } | { ok: false; error }</code>).</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Type guard — это функция с типом результата value is T: если она вернула true, компилятор сужает тип. Компилятор не проверяет тело, поэтому guard надо писать честно. asserts value is T — вариант, который бросает исключение. Состояния я моделирую discriminated union с полем-меткой status: тогда data доступна только в ветке success и невозможные комбинации не компилируются. В default ставлю assertNever, и при добавлении нового варианта компилятор покажет все необработанные места.»</div>"},{"title":"TypeScript во Vue 3","html":"\n<p>Во Vue 3 TypeScript поддерживается из коробки, а <code>&lt;script setup lang=\"ts\"&gt;</code> — основной способ писать компоненты. На middle-собеседовании проверяют, умеете ли вы типизировать пропсы, события, v-model, ref и шаблонные ref, provide/inject, composables и сторы, и понимаете ли, кто и когда проверяет эти типы. Здесь — угол TypeScript; как работает сама реактивность, разбирается в треке Vue.</p>\n<h3>Пропсы, события и v-model</h3>\n<div class=\"code-label\">TaskList.vue</div><pre class=\"code\">&lt;script setup lang=\"ts\"&gt;\nimport { computed } from 'vue'\n\ninterface Props {\n  title: string\n  items: Array&lt;{ id: number; label: string }&gt;\n  size?: 'sm' | 'md' | 'lg'\n  disabled?: boolean\n}\n\n<span class=\"c\">// Vue 3.5: деструктуризация пропсов реактивна, дефолты — обычный JS</span>\nconst { title, items, size = 'md', disabled = false } = defineProps&lt;Props&gt;()\n<span class=\"c\">// До 3.5 то же самое: withDefaults(defineProps&lt;Props&gt;(), { size: 'md' })</span>\n\n<span class=\"c\">// Каждое событие — имя и кортеж аргументов</span>\nconst emit = defineEmits&lt;{\n  select: [id: number]\n  'update:size': [value: 'sm' | 'md' | 'lg']\n}&gt;()\n\n<span class=\"c\">// v-model с типом</span>\nconst query = defineModel&lt;string&gt;('query', { default: '' })\n\nconst count = computed(() =&gt; items.length) <span class=\"c\">// реактивно благодаря компилятору</span>\nfunction onClick(id: number) {\n  if (!disabled) emit('select', id)\n  <span class=\"c\">// emit('select', 'x') — ошибка: ожидается number</span>\n}\n&lt;/script&gt;</pre>\n<p><b>defineProps&lt;Props&gt;()</b> — макрос компилятора. Он не импортируется и не существует в рантайме: при сборке компилятор SFC читает тип <code>Props</code> и генерирует обычное runtime-объявление пропсов (имя, конструктор вроде <code>Boolean</code>, обязательность). Поэтому тип должен быть статически анализируемым: интерфейсы, импорты из других файлов и простые утилиты поддерживаются (с Vue 3.3), но сложные условные типы компилятор может не разобрать.</p>\n<p><b>Значения по умолчанию.</b> С Vue 3.5 деструктуризация пропсов стала реактивной: <code>const { size = 'md' } = defineProps&lt;Props&gt;()</code>. Компилятор заменяет обращения к <code>size</code> на <code>props.size</code>, поэтому реактивность не теряется в <code>computed</code> и шаблоне. Но если передать деструктурированную переменную в <code>watch(size, ...)</code> или в composable, она передастся как значение — оборачивайте в геттер: <code>watch(() =&gt; size, ...)</code>. До 3.5 использовался <code>withDefaults(defineProps&lt;Props&gt;(), { size: 'md' })</code>, его вы увидите во многих проектах.</p>\n<p><b>defineEmits</b> в современном синтаксисе (Vue 3.3+) описывает каждое событие как имя и кортеж аргументов: <code>select: [id: number]</code>. Вызов <code>emit('select', 'x')</code> не скомпилируется. <b>defineModel&lt;T&gt;()</b> (Vue 3.4+) объявляет пропс и событие для v-model одной строкой и возвращает ref, который можно читать и присваивать.</p>\n<h3>ref, computed и шаблонные ref</h3>\n<pre class=\"code\">&lt;script setup lang=\"ts\"&gt;\nimport { ref, computed, useTemplateRef, onMounted } from 'vue'\nimport TaskForm from './TaskForm.vue'\n\ninterface Task { id: number; title: string }\n\nconst count = ref(0)                      <span class=\"c\">// Ref&lt;number&gt; — выведено</span>\nconst selected = ref&lt;Task | null&gt;(null)   <span class=\"c\">// без дженерика был бы Ref&lt;null&gt;</span>\nconst tasks = ref&lt;Task[]&gt;([])             <span class=\"c\">// без дженерика — Ref&lt;never[]&gt;</span>\nconst doneCount = computed(() =&gt; tasks.value.length) <span class=\"c\">// ComputedRef&lt;number&gt;</span>\n\n<span class=\"c\">// Шаблонные ref (Vue 3.5)</span>\nconst input = useTemplateRef&lt;HTMLInputElement&gt;('search')\nconst form = useTemplateRef&lt;InstanceType&lt;typeof TaskForm&gt;&gt;('form')\n\nonMounted(() =&gt; {\n  input.value?.focus()   <span class=\"c\">// null до монтирования и при v-if=false</span>\n  form.value?.reset()    <span class=\"c\">// reset должен быть в defineExpose у TaskForm</span>\n})\n&lt;/script&gt;\n\n&lt;template&gt;\n  &lt;input ref=\"search\" /&gt;\n  &lt;TaskForm ref=\"form\" /&gt;\n&lt;/template&gt;</pre>\n<p><code>ref</code> выводит тип из начального значения: <code>ref(0)</code> — это <code>Ref&lt;number&gt;</code>. Проблемы начинаются, когда начальное значение не описывает будущие данные. <code>ref(null)</code> даст <code>Ref&lt;null&gt;</code>, и объект туда не положить. <code>ref([])</code> даст <code>Ref&lt;never[]&gt;</code>, и <code>push</code> не скомпилируется. В таких случаях дженерик указывают явно: <code>ref&lt;Task | null&gt;(null)</code>, <code>ref&lt;Task[]&gt;([])</code>. Если вызвать <code>ref&lt;Task&gt;()</code> без аргумента, тип будет <code>Ref&lt;Task | undefined&gt;</code>.</p>\n<p>Шаблонные ref в Vue 3.5 получают через <code>useTemplateRef&lt;T&gt;('имя')</code>. Тип значения всегда включает <code>null</code>: до монтирования и при <code>v-if=\"false\"</code> элемента нет, поэтому обращаться нужно через <code>?.</code>. Для DOM-элемента пишут <code>HTMLInputElement</code>, а для дочернего компонента — <code>InstanceType&lt;typeof TaskForm&gt;</code>. Учтите, что снаружи доступно только то, что компонент открыл через <code>defineExpose</code>.</p>\n<h3>provide/inject и composables</h3>\n<p>Обычный <code>inject('table')</code> возвращает <code>unknown</code>: компилятор не знает, что положили под строковым ключом. Решение — <b>InjectionKey&lt;T&gt;</b>: это Symbol, который «несёт» тип значения. <code>provide</code> проверит, что вы кладёте значение нужной формы, а <code>inject</code> вернёт <code>T | undefined</code> (undefined — потому что провайдера может не оказаться выше по дереву).</p>\n<div class=\"code-label\">keys.ts</div><pre class=\"code\"><span class=\"c\">// keys.ts — ключ несёт тип значения</span>\nimport type { InjectionKey, Ref } from 'vue'\n\nexport interface TableContext {\n  selectedIds: Ref&lt;Set&lt;number&gt;&gt;\n  toggle: (id: number) =&gt; void\n}\nexport const tableKey: InjectionKey&lt;TableContext&gt; = Symbol('table')\n\n<span class=\"c\">// DataTable.vue</span>\n<span class=\"c\">// provide(tableKey, { selectedIds, toggle })      — проверка формы значения</span>\n\n<span class=\"c\">// TableRow.vue</span>\n<span class=\"c\">// const ctx = inject(tableKey)                    // TableContext | undefined</span>\n<span class=\"c\">// const ctx = inject(tableKey)!                   // если уверены, что провайдер есть</span>\n<span class=\"c\">// Надёжнее — функция-обёртка с понятной ошибкой:</span>\nimport { inject } from 'vue'\nexport function useTable(): TableContext {\n  const ctx = inject(tableKey)\n  if (!ctx) throw new Error('useTable вызван вне DataTable')\n  return ctx\n}</pre>\n<p>Обёртка <code>useTable()</code> убирает <code>undefined</code> честно — проверкой с понятной ошибкой, а не восклицательным знаком.</p>\n<p><b>Composables</b> типизируются как обычные функции. Возвращаемый тип обычно выводится, а дженерик позволяет вызывающему коду указать тип данных. Принимать параметры удобно в виде <code>MaybeRefOrGetter&lt;T&gt;</code> и разворачивать через <code>toValue()</code> — тогда composable работает и с обычным значением, и с ref, и с геттером.</p>\n<div class=\"code-label\">useFetch.ts</div><pre class=\"code\"><span class=\"c\">// composables/useFetch.ts — дженерик-composable</span>\nimport { ref, shallowRef, toValue, watchEffect, type MaybeRefOrGetter, type Ref } from 'vue'\n\nexport function useFetch&lt;T&gt;(url: MaybeRefOrGetter&lt;string&gt;) {\n  const data = shallowRef&lt;T | null&gt;(null)\n  const error = ref&lt;string | null&gt;(null)\n  const loading = ref(false)\n\n  watchEffect(async () =&gt; {\n    loading.value = true\n    error.value = null\n    try {\n      const res = await fetch(toValue(url))\n      if (!res.ok) throw new Error(res.statusText)\n      data.value = (await res.json()) as T <span class=\"c\">// каст: TS не знает, что пришло</span>\n    } catch (e) {\n      error.value = e instanceof Error ? e.message : String(e)\n    } finally {\n      loading.value = false\n    }\n  })\n\n  return { data, error, loading } <span class=\"c\">// типы выводятся, Ref&lt;T | null&gt; и т.д.</span>\n}\n\n<span class=\"c\">// В компоненте:</span>\n<span class=\"c\">// const { data } = useFetch&lt;Project[]&gt;(() =&gt; `/api/projects?page=${page.value}`)</span></pre>\n<p><b>Pinia</b> в setup-синтаксисе (<code>defineStore('tasks', () =&gt; { ... })</code>) выводит типы state, getters и actions из возвращаемых ref, computed и функций — обычно ничего дописывать не нужно, достаточно типизировать сами ref. При деструктуризации стора используйте <code>storeToRefs</code>, чтобы сохранить и реактивность, и типы.</p>\n<h3>Дженерик-компоненты, satisfies и vue-tsc</h3>\n<p>С Vue 3.3 компонент может быть дженериком: атрибут <code>generic=\"T extends ...\"</code> у <code>&lt;script setup&gt;</code> объявляет параметр типа. Тип <code>T</code> выводится из переданных пропсов, и слоты, события и v-model получают точный тип. Это идеально для переиспользуемых таблиц, списков и селектов.</p>\n<div class=\"code-label\">SelectList.vue</div><pre class=\"code\">&lt;!-- SelectList.vue — дженерик-компонент --&gt;\n&lt;script setup lang=\"ts\" generic=\"T extends { id: number | string }\"&gt;\ndefineProps&lt;{\n  items: T[]\n  label: (item: T) =&gt; string\n}&gt;()\nconst selected = defineModel&lt;T | null&gt;({ default: null })\n&lt;/script&gt;\n\n&lt;template&gt;\n  &lt;ul&gt;\n    &lt;li v-for=\"item in items\" :key=\"item.id\" @click=\"selected = item\"&gt;\n      {{ label(item) }}\n    &lt;/li&gt;\n  &lt;/ul&gt;\n&lt;/template&gt;\n\n&lt;!-- Использование: T выводится из items --&gt;\n&lt;!-- &lt;SelectList :items=\"projects\" :label=\"(p) =&gt; p.title\" v-model=\"current\" /&gt; --&gt;\n&lt;!-- p: Project, current должен быть Ref&lt;Project | null&gt; --&gt;</pre>\n<p>Оператор <b>satisfies</b> (TS 4.9) часто встречается в конфигурациях: маршрутах, колонках таблицы, словарях. Он проверяет, что значение подходит под тип, но <b>не заменяет</b> выведенный тип на указанный. С аннотацией <code>Record&lt;string, Route&gt;</code> вы теряете знание о конкретных ключах, с <code>satisfies</code> — нет.</p>\n<pre class=\"code\">type Route = { path: string; auth?: boolean }\n\n<span class=\"c\">// Аннотация: тип «расширяется» до Record&lt;string, Route&gt;</span>\nconst routesA: Record&lt;string, Route&gt; = {\n  home: { path: '/' },\n  projects: { path: '/projects', auth: true },\n}\nroutesA.hme        <span class=\"c\">// нет ошибки — ключ любой строки</span>\n<span class=\"c\">// satisfies: проверка формы БЕЗ потери точного типа</span>\nconst routes = {\n  home: { path: '/' },\n  projects: { path: '/projects', auth: true },\n} satisfies Record&lt;string, Route&gt;\n\nroutes.projects.auth <span class=\"c\">// boolean — известно точно</span>\n<span class=\"c\">// routes.hme         // Ошибка: такого ключа нет</span>\ntype RouteName = keyof typeof routes <span class=\"c\">// 'home' | 'projects'</span></pre>\n<p>И главное, о чём спрашивают: <b>кто проверяет типы</b>. Vite при разработке и сборке через esbuild просто вырезает типы и ничего не проверяет — проект с ошибками типов запустится. Обычный <code>tsc</code> не умеет читать <code>.vue</code>-файлы. Поэтому в Vue-проектах используют <b>vue-tsc</b> (часть Vue Language Tools): он проверяет и скрипты, и выражения в шаблонах. В шаблоне сборки обычно стоит <code>vue-tsc --build &amp;&amp; vite build</code>, а в CI — отдельный шаг <code>vue-tsc --noEmit</code>.</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Редактор</b><span>Vue - Official, подсказки и ошибки</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step bad\"><b>vite dev</b><span>типы вырезаются, без проверки</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>vue-tsc</b><span>проверка script и template</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step good\"><b>CI</b><span>упавшая проверка блокирует merge</span></div></div></figure>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Пропсы описываю через defineProps с дженериком; компилятор Vue сам генерирует по типу runtime-объявление. Дефолты в Vue 3.5 задаю деструктуризацией, раньше — через withDefaults. События — defineEmits с кортежами аргументов, v-model — defineModel. У ref указываю дженерик, когда начальное значение null или пустой массив. Для provide/inject использую InjectionKey, для переиспользуемых списков — generic-компоненты. Vite типы не проверяет, поэтому в CI обязательно запускается vue-tsc.»</div>"}],"quiz":[{"topic":0,"type":"theory","question":"Зачем писать T extends { id: number } в параметре дженерика?","options":["Чтобы T наследовал класс и получил его поле id","Чтобы ограничить T типами, у которых есть поле id","Чтобы задать { id: number } значением T по умолчанию","Чтобы T стал union с типом { id: number }"],"answer":1,"explanation":"Без ограничения о T ничего не известно, и обращение к .id даёт ошибку. extends задаёт минимальную форму, которую обязан иметь тип: внутри функции можно обращаться к item.id, а снаружи нельзя передать объекты без id. Конкретный тип по-прежнему выводится из аргумента."},{"topic":0,"type":"practice","question":"Что произойдёт на последней строке?","code":"function getField<T, K extends keyof T>(obj: T, key: K): T[K] {\n  return obj[key]\n}\nconst task = { id: 1, title: 'A', done: false }\ngetField(task, 'name')","options":["Вернётся undefined: поля name в объекте нет","Ошибка компиляции: 'name' не входит в keyof T","Вызов скомпилируется, результат будет типа unknown","Ошибка в рантайме при обращении к несуществующему полю"],"answer":1,"explanation":"K ограничен keyof T, то есть union ключей объекта: 'id' | 'title' | 'done'. Строка name туда не входит, поэтому вызов не скомпилируется. Это и есть смысл связки K extends keyof T."},{"topic":0,"type":"practice","question":"Какой тип вернёт вызов?","code":"function first<T>(list: T[]): T | undefined {\n  return list[0]\n}\nconst x = first([1, 'a'])","options":["number | undefined","string | number | undefined","(string | number)[] | undefined","unknown"],"answer":1,"explanation":"Массив [1, \"a\"] выводится как (string | number)[], поэтому T = string | number, и к нему добавляется undefined из сигнатуры."},{"topic":1,"type":"theory","question":"Какой тип лучше подходит для данных формы создания пользователя, если id выдаёт сервер?","options":["Partial<User>","Omit<User, 'id'>","Pick<User, 'id'>","Required<User>"],"answer":1,"explanation":"Omit убирает перечисленные ключи и оставляет остальные с прежней обязательностью. Partial сделал бы необязательными все поля, и форма без имени тоже прошла бы проверку."},{"topic":1,"type":"theory","question":"Как получить тип данных, которые возвращает async-функция fetchUser?","options":["ReturnType<typeof fetchUser>","Awaited<ReturnType<typeof fetchUser>>","Awaited<typeof fetchUser>","Parameters<typeof fetchUser>"],"answer":1,"explanation":"ReturnType даст Promise<User>, а Awaited разворачивает промис (в том числе вложенный) до значения. typeof нужен, потому что fetchUser — значение, а утилиты принимают типы."},{"topic":1,"type":"practice","question":"Скомпилируется ли присваивание?","code":"type Filters = { range: { from: string; to: string }; search: string }\nconst f: Partial<Filters> = { range: { from: '2026-01-01' } }","options":["Да, Partial делает необязательными все поля на любой глубине","Нет: Partial поверхностный, в range нужно поле to","Нет: Partial нельзя применять к вложенным объектам","Да, но range станет any и проверка пропадёт"],"answer":1,"explanation":"Встроенные утилиты работают только на первом уровне: внутри range поле to по-прежнему обязательно. Для глубокой необязательности пишут свой рекурсивный DeepPartial на mapped types."},{"topic":2,"type":"theory","question":"Что сообщает компилятору сигнатура function isProject(v: unknown): v is Project?","options":["Что функция преобразует v в Project и вернёт его","Что при true внутри if переменная v имеет тип Project","Что функция бросит ошибку, если v не Project","Что Project проверяется автоматически по интерфейсу в рантайме"],"answer":1,"explanation":"Type predicate — обещание разработчика: компилятор верит на слово и не проверяет тело функции. Если проверка внутри написана неправильно, компилятор этого не заметит. Бросать ошибку — это поведение asserts, а не is."},{"topic":2,"type":"practice","question":"В тип добавили вариант { status: 'empty' }. Что произойдёт с этим кодом?","code":"function label(s: LoadState): string {\n  switch (s.status) {\n    case 'idle': return 'Ожидание'\n    case 'loading': return 'Загрузка'\n    case 'success': return 'Готово'\n    case 'error': return s.error\n    default: return assertNever(s)\n  }\n}","options":["Ничего, ветка default обработает новый вариант без ошибок","Ошибка компиляции в default: s больше не имеет тип never","Ошибка возникнет только в рантайме, когда придёт status: 'empty'","TS автоматически добавит case для нового варианта"],"answer":1,"explanation":"В default попадают все необработанные варианты. Пока их нет, тип s — never. Новый вариант делает тип непустым, и вызов assertNever(s) перестаёт компилироваться: аргумент типа { status: 'empty' } нельзя передать в параметр never. Так проверка исчерпанности напоминает обработать новый случай."},{"topic":3,"type":"theory","question":"Что Vue делает с defineProps<Props>() при компиляции SFC?","options":["Ничего, проверка пропсов есть только в TypeScript","Генерирует по типу runtime-объявление props","Отправляет тип в vue-tsc для проверки при сборке","Превращает Props в класс с геттерами"],"answer":1,"explanation":"Компилятор SFC читает тип и строит обычный объект props (имена, Boolean/String и обязательность), поэтому тип должен быть статически анализируемым: компилятор понимает интерфейсы и импорты, но не всякий вычисляемый тип. Полноценную проверку типов делает vue-tsc, а не сборка."},{"topic":3,"type":"theory","question":"Зачем в проекте на Vue нужен vue-tsc?","options":["Он ускоряет сборку Vite за счёт кэша типов","Vite не проверяет типы, а tsc не понимает .vue","Он генерирует d.ts для API по ответам сервера","Он нужен только для SSR, чтобы типизировать серверный код"],"answer":1,"explanation":"Vite (через esbuild) транспилирует TS без проверки, а обычный tsc не понимает .vue. Поэтому в CI и в скрипте build запускают vue-tsc --noEmit, который ловит ошибки и в script setup, и в шаблонах."},{"topic":3,"type":"practice","question":"Почему tasks.value.push(task) даёт ошибку?","code":"interface Task { id: number; title: string }\nconst tasks = ref([])\n\nfunction add(task: Task) {\n  tasks.value.push(task)\n}","options":["ref нельзя мутировать через push, только присваиванием","Из [] выведен Ref<never[]>, нужен ref<Task[]>([])","Нужно использовать reactive вместо ref для массивов","Нужно писать tasks.push без .value: ref разворачивается сам"],"answer":1,"explanation":"Из пустого литерала [] внутри ref TypeScript выводит never[], и в такой массив ничего нельзя положить. Начальное значение не описывает будущие данные, поэтому дженерик нужно указать явно."},{"topic":3,"type":"practice","question":"Чем отличаются routesA и routesB?","code":"type Route = { path: string; auth?: boolean }\nconst routesA: Record<string, Route> = { home: { path: '/' } }\nconst routesB = { home: { path: '/' } } satisfies Record<string, Route>","options":["Ничем, оба варианта дают одинаковый тип","routesB.hme — ошибка, routesA.hme — нет: satisfies сохраняет ключи","routesB не проверяется на соответствие Route, это просто подсказка","satisfies работает только с as const, иначе он игнорируется"],"answer":1,"explanation":"Аннотация заменяет выведенный тип на указанный (Record<string, Route>), и информация о конкретных ключах теряется, поэтому routesA.hme не даёт ошибки. satisfies только проверяет совместимость, а тип переменной остаётся выведенным с ключом home."}]}
+{
+  "id": "ts-middle",
+  "trackId": "ts",
+  "level": "middle",
+  "topics": [
+    {
+      "title": "Generics",
+      "html": "\n<p>Дженерики (generics, обобщённые типы) — это параметры для типов. Как обычная функция принимает значения через параметры, так дженерик принимает типы. На middle-уровне от вас ждут, что вы уверенно пишете дженерик-функции и интерфейсы, понимаете ограничения через <code>extends</code> и связку <code>keyof</code> с <code>T[K]</code>.</p>\n<h3>Какую проблему решают дженерики</h3>\n<p>Представьте функцию <code>first</code>, которая возвращает первый элемент массива. Без дженериков у вас два плохих варианта. Можно написать отдельную функцию для массива задач, массива пользователей и массива чисел — это дублирование. Можно принять <code>any[]</code> и вернуть <code>any</code> — тогда на выходе теряется вся информация о типе, и опечатка в поле результата не будет поймана.</p>\n<p>Дженерик решает это так: функция объявляет параметр типа <code>T</code> в угловых скобках, и этот <code>T</code> связывает вход и выход. «Что пришло на вход как массив <code>T</code>, то и вернётся как <code>T</code>».</p>\n<pre class=\"code\"><span class=\"c\">// Без дженерика: либо any, либо копия функции под каждый тип</span>\nfunction firstAny(list: any[]): any {\n  return list[0]\n}\n\n<span class=\"c\">// С дженериком: тип результата связан с типом входа</span>\nfunction first&lt;T&gt;(list: T[]): T | undefined {\n  return list[0]\n}\nconst p = first([{ id: 1, title: 'A' }]) <span class=\"c\">// { id: number; title: string } | undefined</span>\nconst n = first&lt;number&gt;([])              <span class=\"c\">// T задан явно</span>\n\n<span class=\"c\">// Дженерик-интерфейс: ответ API с данными любого типа</span>\ninterface ApiResponse&lt;T&gt; {\n  data: T\n  total: number\n  page: number\n}\ninterface Project { id: number; title: string }\n\nasync function getList&lt;T&gt;(url: string): Promise&lt;ApiResponse&lt;T[]&gt;&gt; {\n  const res = await fetch(url)\n  return res.json()  <span class=\"c\">// json() возвращает any — доверяем серверу</span>\n}\nconst projects = await getList&lt;Project&gt;('/api/projects')\nprojects.data[0].title <span class=\"c\">// string</span>\n\n<span class=\"c\">// Значение по умолчанию для параметра типа</span>\ninterface Paginated&lt;T = unknown&gt; { items: T[]; next: string | null }</pre>\n<p>Разберём, что происходит. При вызове <code>first([{ id: 1, title: 'A' }])</code> вы не указываете <code>T</code> — компилятор <b>выводит</b> его из аргумента: <code>T</code> становится <code>{ id: number; title: string }</code>, и результат получает этот же тип. Явно указывать <code>T</code> нужно, когда выводить не из чего: например, пустой массив или функция <code>getList&lt;Project&gt;(url)</code>, у которой тип данных вообще не связан с аргументами.</p>\n<p>Дженерики бывают не только у функций. <code>interface ApiResponse&lt;T&gt;</code> описывает обёртку ответа один раз, а конкретный тип данных подставляется при использовании: <code>ApiResponse&lt;Project[]&gt;</code>, <code>ApiResponse&lt;User&gt;</code>. Так же устроены встроенные типы <code>Array&lt;T&gt;</code>, <code>Promise&lt;T&gt;</code>, <code>Ref&lt;T&gt;</code> во Vue. Параметру типа можно задать значение по умолчанию: <code>Paginated&lt;T = unknown&gt;</code> — если тип не передан, будет <code>unknown</code>.</p>\n<div class=\"note warn\">Ловушка в getList: res.json() возвращает any, и дженерик лишь подписывает результат нужным типом. Это не проверка: если сервер пришлёт другую форму, TypeScript об этом не узнает. Дженерик-обёртка над fetch — удобство, а не гарантия.</div>\n<h3>Ограничения: extends, keyof и T[K]</h3>\n<p>Внутри дженерик-функции о <code>T</code> ничего не известно, поэтому обратиться к <code>item.id</code> нельзя: вдруг <code>T</code> — это число? <b>Ограничение</b> <code>T extends { id: number }</code> говорит: «T может быть любым типом, но у него обязательно есть числовой id». Внутри функции становится доступно <code>item.id</code>, а снаружи компилятор не даст передать массив объектов без id. Важно, что ограничение — это нижняя планка, а не точный тип: если передать массив задач, <code>T</code> будет полноценным типом задачи со всеми полями.</p>\n<p>Оператор <b>keyof</b> превращает тип объекта в union его ключей: для <code>Task</code> это <code>'id' | 'title' | 'done'</code>. А <b>индексный доступ</b> <code>T[K]</code> возвращает тип значения по ключу: <code>Task['title']</code> — это <code>string</code>. Вместе они дают один из самых полезных шаблонов.</p>\n<pre class=\"code\"><span class=\"c\">// Ограничение: T обязан иметь поле id</span>\nfunction byId&lt;T extends { id: number }&gt;(list: T[], id: number): T | undefined {\n  return list.find((item) =&gt; item.id === id)\n}\n\n<span class=\"c\">// keyof — объединение ключей, T[K] — тип значения по ключу</span>\ninterface Task { id: number; title: string; done: boolean }\ntype TaskKey = keyof Task        <span class=\"c\">// 'id' | 'title' | 'done'</span>\ntype TitleType = Task['title']   <span class=\"c\">// string</span>\n\nfunction getField&lt;T, K extends keyof T&gt;(obj: T, key: K): T[K] {\n  return obj[key]\n}\nconst t: Task = { id: 1, title: 'Сверстать', done: false }\ngetField(t, 'done')    <span class=\"c\">// boolean</span>\n<span class=\"c\">// getField(t, 'name') // Ошибка: 'name' не ключ Task</span>\n\n<span class=\"c\">// Сортировка таблицы по колонке — типичный фронтовый пример</span>\nfunction sortBy&lt;T, K extends keyof T&gt;(rows: T[], key: K): T[] {\n  return [...rows].sort((a, b) =&gt; (a[key] &gt; b[key] ? 1 : a[key] &lt; b[key] ? -1 : 0))\n}\nsortBy([t], 'title')</pre>\n<p>В <code>getField&lt;T, K extends keyof T&gt;</code> второй параметр типа ограничен ключами первого. Компилятор выводит <code>T</code> из объекта, <code>K</code> — из строки-ключа, и результат получает точный тип: для <code>'done'</code> это <code>boolean</code>, для <code>'title'</code> — <code>string</code>. Передать несуществующий ключ нельзя. Тот же приём лежит в основе сортировки и фильтрации таблиц по колонке, функции <code>pick</code>, типизированных форм и <code>watch</code> по полю объекта.</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Вызов</b><span>getField(task, done)</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Вывод T</b><span>тип объекта task</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Проверка K</b><span>done входит в keyof T</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Результат</b><span>T[K] = boolean</span></div></div><figcaption>Как компилятор обрабатывает вызов с K extends keyof T</figcaption></figure>\n<h3>Когда дженерик не нужен</h3>\n<p>Частая ошибка — дженерик ради дженерика. Если параметр типа встречается в сигнатуре только один раз, он ничего не связывает и его можно заменить конкретным типом или <code>unknown</code>. Например, <code>function log&lt;T&gt;(value: T): void</code> ничем не лучше <code>function log(value: unknown): void</code>. Правило простое: дженерик оправдан, когда <code>T</code> связывает минимум два места — вход и выход или два аргумента.</p>\n<p>Ещё одна полезная деталь из TS 5.x: модификатор <code>const</code> у параметра типа (<code>function f&lt;const T&gt;(x: T)</code>) заставляет выводить литеральные типы, как если бы аргумент был записан с <code>as const</code>. А утилита <code>NoInfer&lt;T&gt;</code> (TS 5.4) запрещает выводить <code>T</code> из конкретного аргумента — полезно, когда значение по умолчанию должно быть одним из ранее переданных вариантов.</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Дженерик — это параметр типа, который связывает типы входа и выхода, чтобы не терять информацию и не дублировать код. Обычно тип выводится из аргументов. Чтобы обращаться к полям T, его ограничивают через extends. Связка K extends keyof T и возвращаемый T[K] даёт типобезопасный доступ по ключу — так типизируют сортировку таблицы по колонке или pick. Если параметр типа используется один раз, дженерик не нужен.»</div>"
+    },
+    {
+      "title": "Utility types",
+      "html": "\n<p>Utility types — встроенные в TypeScript типы-функции, которые строят новый тип из существующего. Их смысл — не описывать одну и ту же сущность пять раз. У пользователя есть модель из API, форма создания без id, форма редактирования, где всё необязательно, строка таблицы с тремя колонками. Если описать каждую вручную, при добавлении поля в модель придётся править пять мест. С утилитами все производные типы обновятся сами.</p>\n<h3>Утилиты для объектов</h3>\n<pre class=\"code\">interface User {\n  id: number\n  name: string\n  email: string\n  role: 'admin' | 'user'\n  avatar?: string\n}\n\n<span class=\"c\">// Форма редактирования: все поля необязательны</span>\ntype UserPatch = Partial&lt;User&gt;\n<span class=\"c\">// Форма создания: без id, его выдаст сервер</span>\ntype UserCreate = Omit&lt;User, 'id'&gt;\n<span class=\"c\">// Строка таблицы: только нужные колонки</span>\ntype UserRow = Pick&lt;User, 'id' | 'name' | 'role'&gt;\n<span class=\"c\">// Профиль после загрузки: avatar гарантированно есть</span>\ntype UserFull = Required&lt;User&gt;\n<span class=\"c\">// Неизменяемая копия из стора</span>\ntype UserView = Readonly&lt;User&gt;\n\n<span class=\"c\">// Record — словарь «ключ → значение»</span>\ntype Role = User['role']\nconst roleLabels: Record&lt;Role, string&gt; = {\n  admin: 'Администратор',\n  user: 'Пользователь', <span class=\"c\">// забыли ключ — ошибка компиляции</span>\n}\nconst usersById: Record&lt;number, User&gt; = {}\n\n<span class=\"c\">// Extract / Exclude / NonNullable работают с union</span>\ntype Status = 'idle' | 'loading' | 'success' | 'error'\ntype Busy = Extract&lt;Status, 'loading'&gt;            <span class=\"c\">// 'loading'</span>\ntype NotIdle = Exclude&lt;Status, 'idle'&gt;            <span class=\"c\">// 'loading' | 'success' | 'error'</span>\ntype Name = NonNullable&lt;string | null | undefined&gt; <span class=\"c\">// string</span></pre>\n<p>Пройдёмся по каждой утилите на примере пользователя:</p>\n<ul>\n  <li><b>Partial&lt;T&gt;</b> делает все поля необязательными. Подходит для PATCH-запроса и для функции <code>updateUser(id, patch)</code>, которая меняет только переданные поля.</li>\n  <li><b>Required&lt;T&gt;</b> — обратная операция: все поля становятся обязательными, и <code>avatar</code> тоже.</li>\n  <li><b>Readonly&lt;T&gt;</b> запрещает присваивание полям. Используется для данных из стора, которые компонент не должен менять напрямую.</li>\n  <li><b>Pick&lt;T, K&gt;</b> оставляет только перечисленные ключи — например, колонки таблицы. <b>Omit&lt;T, K&gt;</b> делает наоборот: убирает перечисленные. Для формы создания удобно <code>Omit&lt;User, 'id'&gt;</code>: id выдаст сервер.</li>\n  <li><b>Record&lt;K, V&gt;</b> описывает словарь, у которого ключи типа <code>K</code>, а значения типа <code>V</code>. Если <code>K</code> — union литералов, Record требует <b>все</b> ключи. Это отличный способ не забыть подпись для нового статуса или роли: добавили роль в union — компилятор потребует добавить её в словарь подписей.</li>\n</ul>\n<div class=\"note warn\">Ловушка: все эти утилиты поверхностные. Partial делает необязательными только поля первого уровня, а вложенные объекты остаются как были. Readonly тоже не защищает вложенные объекты. Для глубоких версий пишут свои рекурсивные типы (DeepPartial) на mapped types — об этом на уровне senior.</div>\n<p>Ещё одна ловушка с Omit: он не проверяет, что убираемый ключ существует. <code>Omit&lt;User, 'idd'&gt;</code> скомпилируется без ошибки и просто вернёт исходный тип. Pick, наоборот, требует существующих ключей.</p>\n<h3>Утилиты для union</h3>\n<p>Три утилиты работают не с полями объекта, а с членами union. <b>Exclude&lt;T, U&gt;</b> убирает из union варианты, совместимые с <code>U</code>: <code>Exclude&lt;Status, 'idle'&gt;</code> — все статусы, кроме idle. <b>Extract&lt;T, U&gt;</b> наоборот оставляет только совместимые. <b>NonNullable&lt;T&gt;</b> убирает <code>null</code> и <code>undefined</code>.</p>\n<p>Частый вопрос на собеседовании: «Чем Omit отличается от Exclude?». Omit работает с ключами объекта и возвращает объект. Exclude работает с union и возвращает union. Внутри Omit, кстати, использует Exclude: <code>Omit&lt;T, K&gt;</code> — это <code>Pick&lt;T, Exclude&lt;keyof T, K&gt;&gt;</code>.</p>\n<div class=\"table-wrap\"><table><thead><tr><th>Утилита</th><th>Работает с</th><th>Пример во фронтенде</th></tr></thead><tbody><tr><td><code>Partial</code>, <code>Required</code>, <code>Readonly</code></td><td>полями объекта</td><td>патч сущности, данные из стора</td></tr><tr><td><code>Pick</code>, <code>Omit</code></td><td>ключами объекта</td><td>строка таблицы, форма создания</td></tr><tr><td><code>Record</code></td><td>ключами и значениями</td><td>подписи статусов, кэш по id</td></tr><tr><td><code>Exclude</code>, <code>Extract</code>, <code>NonNullable</code></td><td>членами union</td><td>статусы без idle, значение без null</td></tr><tr><td><code>ReturnType</code>, <code>Parameters</code>, <code>Awaited</code></td><td>функциями и промисами</td><td>тип ответа API-функции, обёртки</td></tr></tbody></table></div>\n<h3>Утилиты для функций</h3>\n<p>Иногда тип уже «живёт» в функции, а отдельного интерфейса нет: например, функция API возвращает объект, тип которого выведен автоматически, или composable возвращает набор ref. Вместо того чтобы описывать этот тип вручную и следить за синхронизацией, его извлекают.</p>\n<pre class=\"code\"><span class=\"c\">// Типы из функций: не дублируем, а извлекаем</span>\nasync function fetchUser(id: number, withProjects = false) {\n  const res = await fetch(`/api/users/${id}?projects=${withProjects}`)\n  return (await res.json()) as { id: number; name: string; projects?: string[] }\n}\n\ntype FetchUserArgs = Parameters&lt;typeof fetchUser&gt;     <span class=\"c\">// [id: number, withProjects?: boolean]</span>\ntype FetchUserPromise = ReturnType&lt;typeof fetchUser&gt;  <span class=\"c\">// Promise&lt;{...}&gt;</span>\ntype FetchedUser = Awaited&lt;ReturnType&lt;typeof fetchUser&gt;&gt; <span class=\"c\">// { id; name; projects? }</span>\n\n<span class=\"c\">// Обёртка с тем же набором аргументов</span>\nfunction withLog&lt;F extends (...args: any[]) =&gt; any&gt;(fn: F) {\n  return (...args: Parameters&lt;F&gt;): ReturnType&lt;F&gt; =&gt; {\n    console.log('call', args)\n    return fn(...args)\n  }\n}\nconst loggedFetch = withLog(fetchUser) <span class=\"c\">// (id, withProjects?) =&gt; Promise&lt;...&gt;</span></pre>\n<p><b>Parameters&lt;F&gt;</b> возвращает кортеж типов параметров функции. <b>ReturnType&lt;F&gt;</b> — тип результата. У async-функции это промис, поэтому чтобы получить сами данные, добавляют <b>Awaited</b>, который разворачивает промис (и даже вложенный промис) до значения. Обратите внимание на <code>typeof fetchUser</code>: утилиты принимают типы, а <code>fetchUser</code> — значение, поэтому сначала оператором <code>typeof</code> получаем его тип.</p>\n<p>Во Vue этот приём часто используют, чтобы получить тип того, что возвращает composable: <code>type TableState = ReturnType&lt;typeof useTable&gt;</code>. Функция <code>withLog</code> показывает другой сценарий — обёртку, которая принимает и возвращает аргументы ровно того же типа, что и исходная функция.</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Utility types строят производные типы из одной модели, чтобы не дублировать описания. Partial для патчей, Omit для формы создания без id, Pick для строки таблицы, Record для словаря, где нужны все ключи union. Exclude, Extract и NonNullable работают с union, а Omit — с ключами объекта. ReturnType, Parameters и Awaited извлекают типы из функций, например тип ответа API-функции. Важно помнить, что эти утилиты поверхностные.»</div>"
+    },
+    {
+      "title": "Type guards и discriminated unions",
+      "html": "\n<p>На junior-уровне мы сужали типы встроенными проверками: <code>typeof</code>, <code>in</code>, <code>instanceof</code>. На middle-уровне нужно уметь две вещи: писать собственные проверки (type guards), которые компилятор понимает так же, как встроенные, и моделировать состояния через discriminated unions, чтобы невозможные комбинации просто не компилировались.</p>\n<h3>Пользовательские type guards</h3>\n<p>Встроенные проверки хороши для примитивов, но не умеют отвечать на вопрос «это объект проекта?». Можно вынести проверку в функцию, но обычная функция, возвращающая <code>boolean</code>, ничего не сообщает компилятору: после <code>if (isProject(data))</code> переменная останется <code>unknown</code>. Чтобы это исправить, у функции пишут особый тип результата — <b>type predicate</b> <code>value is Project</code>. Он означает: «если функция вернула true, то аргумент имеет тип Project».</p>\n<pre class=\"code\">interface Project { id: number; title: string }\n\n<span class=\"c\">// Пользовательский type guard: возвращает boolean, но сообщает компилятору тип</span>\nfunction isProject(value: unknown): value is Project {\n  return (\n    typeof value === 'object' &amp;&amp; value !== null &amp;&amp;\n    'id' in value &amp;&amp; typeof value.id === 'number' &amp;&amp;\n    'title' in value &amp;&amp; typeof value.title === 'string'\n  )\n}\n\nconst data: unknown = await fetch('/api/project/1').then((r) =&gt; r.json())\nif (isProject(data)) {\n  data.title <span class=\"c\">// Project</span>\n}\n\n<span class=\"c\">// Фильтр с отсечением null: с TS 5.5 предикат выводится сам</span>\nconst list = [1, null, 3].filter((x) =&gt; x !== null) <span class=\"c\">// number[]</span>\n\n<span class=\"c\">// asserts — функция либо бросает, либо дальше тип сужен</span>\nfunction assertDefined&lt;T&gt;(value: T, msg: string): asserts value is NonNullable&lt;T&gt; {\n  if (value === null || value === undefined) throw new Error(msg)\n}\nconst el = document.querySelector('.grid') <span class=\"c\">// Element | null</span>\nassertDefined(el, 'Нет контейнера таблицы')\nel.classList.add('ready')                  <span class=\"c\">// Element</span></pre>\n<p>Разберём три идеи из примера. Первая — <code>isProject</code> принимает <code>unknown</code> и последовательно проверяет, что это объект, не null, у него есть поля нужных типов. С TS 4.9 после <code>'id' in value</code> можно обращаться к <code>value.id</code>, поэтому такие проверки пишутся без приведений.</p>\n<p>Вторая — с TS 5.5 компилятор сам выводит предикат у простых стрелочных функций. Раньше <code>[1, null, 3].filter((x) =&gt; x !== null)</code> давал <code>(number | null)[]</code>, и приходилось писать предикат руками. Теперь результат — <code>number[]</code>.</p>\n<p>Третья — <b>assertion function</b> с сигнатурой <code>asserts value is T</code>. Она ничего не возвращает: либо бросает исключение, либо после её вызова компилятор считает тип суженным до конца блока. Это удобно для инвариантов вроде «контейнер таблицы обязан существовать». Важное ограничение: если assertion-функция записана как стрелочная и сохранена в <code>const</code>, у константы должна быть явная аннотация типа, иначе компилятор выдаст ошибку «Assertions require every name in the call target to be declared with an explicit type annotation». С обычным объявлением через <code>function</code> такой проблемы нет.</p>\n<div class=\"note warn\">Главная ловушка type guard: компилятор не проверяет, что тело функции соответствует предикату. Если написать return true, TypeScript поверит и сузит тип. По сути guard — это as, спрятанный в функцию, поэтому проверку внутри нужно писать честно и покрывать тестами.</div>\n<h3>Discriminated unions: моделируем состояния</h3>\n<p>Типичная ошибка в состоянии загрузки — набор независимых полей: <code>loading: boolean</code>, <code>data: T | null</code>, <code>error: string | null</code>. Такой тип допускает бессмысленные комбинации: загрузка идёт и одновременно есть ошибка; данных нет, ошибки нет и загрузка не идёт. В шаблоне приходится писать <code>data!</code> и надеяться, что всё согласовано.</p>\n<p><b>Дискриминированное объединение</b> (tagged union) решает это: каждый вариант состояния — отдельный тип объекта, и у всех есть общее поле-метка с литеральным типом, обычно <code>status</code> или <code>type</code>. Проверка метки сужает весь объект до одного варианта.</p>\n<pre class=\"code\"><span class=\"c\">// Дискриминированное объединение: общее поле-метка status</span>\ntype LoadState&lt;T&gt; =\n  | { status: 'idle' }\n  | { status: 'loading' }\n  | { status: 'success'; data: T }\n  | { status: 'error'; error: string }\n\nfunction render(state: LoadState&lt;string[]&gt;): string {\n  switch (state.status) {\n    case 'idle':\n      return 'Нажмите «Загрузить»'\n    case 'loading':\n      return 'Загрузка…'\n    case 'success':\n      return state.data.join(', ')   <span class=\"c\">// data есть только тут</span>\n    case 'error':\n      return 'Ошибка: ' + state.error\n    default:\n      return assertNever(state)      <span class=\"c\">// все варианты разобраны → state: never</span>\n  }\n}\n\nfunction assertNever(x: never): never {\n  throw new Error('Необработанный вариант: ' + JSON.stringify(x))\n}\n<span class=\"c\">// Добавили { status: 'empty' } — switch перестанет компилироваться</span></pre>\n<p>Внутри <code>case 'success'</code> TypeScript знает, что это вариант с полем <code>data</code>, и разрешает к нему обратиться. Обратиться к <code>state.data</code> в ветке <code>'error'</code> нельзя — там такого поля нет. Невозможные комбинации больше невыразимы.</p>\n<div class=\"boxes\"><div class=\"box bad\"><b>Флаги</b><span>loading, data, error независимы — 8 комбинаций, большая часть бессмысленны, в шаблоне нужны ! и проверки</span></div><div class=\"box good\"><b>Discriminated union</b><span>4 состояния, у каждого свои поля; проверка status сужает тип, лишнего не бывает</span></div></div>\n<h3>Проверка исчерпанности через never</h3>\n<p>Последний элемент мозаики — ветка <code>default</code> с <code>assertNever(state)</code>. Когда все варианты разобраны в <code>case</code>, в <code>default</code> не остаётся ни одного варианта, и тип <code>state</code> там — <code>never</code>. Функция <code>assertNever</code> принимает только <code>never</code>, поэтому вызов компилируется.</p>\n<p>Теперь кто-то добавляет в тип вариант <code>{ status: 'empty' }</code>. В <code>default</code> попадает этот новый вариант, тип становится не <code>never</code>, и вызов <code>assertNever(state)</code> перестаёт компилироваться. Компилятор сам показывает каждое место, где новое состояние не обработано. В рантайме функция бросает исключение — на случай, если сервер прислал неизвестный статус. Тот же эффект даёт <code>const _exhaustive: never = state</code> или ESLint-правило <code>switch-exhaustiveness-check</code>.</p>\n<p>Этот приём применяют не только к состояниям загрузки: типы событий в шине, действия в редьюсере, виды фильтров таблицы, варианты ответа API (<code>{ ok: true; data } | { ok: false; error }</code>).</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Type guard — это функция с типом результата value is T: если она вернула true, компилятор сужает тип. Компилятор не проверяет тело, поэтому guard надо писать честно. asserts value is T — вариант, который бросает исключение. Состояния я моделирую discriminated union с полем-меткой status: тогда data доступна только в ветке success и невозможные комбинации не компилируются. В default ставлю assertNever, и при добавлении нового варианта компилятор покажет все необработанные места.»</div>"
+    },
+    {
+      "title": "TypeScript во Vue 3",
+      "html": "\n<p>Во Vue 3 TypeScript поддерживается из коробки, а <code>&lt;script setup lang=\"ts\"&gt;</code> — основной способ писать компоненты. На middle-собеседовании проверяют, умеете ли вы типизировать пропсы, события, v-model, ref и шаблонные ref, provide/inject, composables и сторы, и понимаете ли, кто и когда проверяет эти типы. Здесь — угол TypeScript; как работает сама реактивность, разбирается в треке Vue.</p>\n<h3>Пропсы, события и v-model</h3>\n<div class=\"code-label\">TaskList.vue</div><pre class=\"code\">&lt;script setup lang=\"ts\"&gt;\nimport { computed } from 'vue'\n\ninterface Props {\n  title: string\n  items: Array&lt;{ id: number; label: string }&gt;\n  size?: 'sm' | 'md' | 'lg'\n  disabled?: boolean\n}\n\n<span class=\"c\">// Vue 3.5: деструктуризация пропсов реактивна, дефолты — обычный JS</span>\nconst { title, items, size = 'md', disabled = false } = defineProps&lt;Props&gt;()\n<span class=\"c\">// До 3.5 то же самое: withDefaults(defineProps&lt;Props&gt;(), { size: 'md' })</span>\n\n<span class=\"c\">// Каждое событие — имя и кортеж аргументов</span>\nconst emit = defineEmits&lt;{\n  select: [id: number]\n  'update:size': [value: 'sm' | 'md' | 'lg']\n}&gt;()\n\n<span class=\"c\">// v-model с типом</span>\nconst query = defineModel&lt;string&gt;('query', { default: '' })\n\nconst count = computed(() =&gt; items.length) <span class=\"c\">// реактивно благодаря компилятору</span>\nfunction onClick(id: number) {\n  if (!disabled) emit('select', id)\n  <span class=\"c\">// emit('select', 'x') — ошибка: ожидается number</span>\n}\n&lt;/script&gt;</pre>\n<p><b>defineProps&lt;Props&gt;()</b> — макрос компилятора. Он не импортируется и не существует в рантайме: при сборке компилятор SFC читает тип <code>Props</code> и генерирует обычное runtime-объявление пропсов (имя, конструктор вроде <code>Boolean</code>, обязательность). Поэтому тип должен быть статически анализируемым: интерфейсы, импорты из других файлов и простые утилиты поддерживаются (с Vue 3.3), но сложные условные типы компилятор может не разобрать.</p>\n<p><b>Значения по умолчанию.</b> С Vue 3.5 деструктуризация пропсов стала реактивной: <code>const { size = 'md' } = defineProps&lt;Props&gt;()</code>. Компилятор заменяет обращения к <code>size</code> на <code>props.size</code>, поэтому реактивность не теряется в <code>computed</code> и шаблоне. Но если передать деструктурированную переменную в <code>watch(size, ...)</code> или в composable, она передастся как значение — оборачивайте в геттер: <code>watch(() =&gt; size, ...)</code>. До 3.5 использовался <code>withDefaults(defineProps&lt;Props&gt;(), { size: 'md' })</code>, его вы увидите во многих проектах.</p>\n<p><b>defineEmits</b> в современном синтаксисе (Vue 3.3+) описывает каждое событие как имя и кортеж аргументов: <code>select: [id: number]</code>. Вызов <code>emit('select', 'x')</code> не скомпилируется. <b>defineModel&lt;T&gt;()</b> (Vue 3.4+) объявляет пропс и событие для v-model одной строкой и возвращает ref, который можно читать и присваивать.</p>\n<h3>ref, computed и шаблонные ref</h3>\n<pre class=\"code\">&lt;script setup lang=\"ts\"&gt;\nimport { ref, computed, useTemplateRef, onMounted } from 'vue'\nimport TaskForm from './TaskForm.vue'\n\ninterface Task { id: number; title: string }\n\nconst count = ref(0)                      <span class=\"c\">// Ref&lt;number&gt; — выведено</span>\nconst selected = ref&lt;Task | null&gt;(null)   <span class=\"c\">// без дженерика был бы Ref&lt;null&gt;</span>\nconst tasks = ref&lt;Task[]&gt;([])             <span class=\"c\">// без дженерика — Ref&lt;never[]&gt;</span>\nconst doneCount = computed(() =&gt; tasks.value.length) <span class=\"c\">// ComputedRef&lt;number&gt;</span>\n\n<span class=\"c\">// Шаблонные ref (Vue 3.5)</span>\nconst input = useTemplateRef&lt;HTMLInputElement&gt;('search')\nconst form = useTemplateRef&lt;InstanceType&lt;typeof TaskForm&gt;&gt;('form')\n\nonMounted(() =&gt; {\n  input.value?.focus()   <span class=\"c\">// null до монтирования и при v-if=false</span>\n  form.value?.reset()    <span class=\"c\">// reset должен быть в defineExpose у TaskForm</span>\n})\n&lt;/script&gt;\n\n&lt;template&gt;\n  &lt;input ref=\"search\" /&gt;\n  &lt;TaskForm ref=\"form\" /&gt;\n&lt;/template&gt;</pre>\n<p><code>ref</code> выводит тип из начального значения: <code>ref(0)</code> — это <code>Ref&lt;number&gt;</code>. Проблемы начинаются, когда начальное значение не описывает будущие данные. <code>ref(null)</code> даст <code>Ref&lt;null&gt;</code>, и объект туда не положить. <code>ref([])</code> даст <code>Ref&lt;never[]&gt;</code>, и <code>push</code> не скомпилируется. В таких случаях дженерик указывают явно: <code>ref&lt;Task | null&gt;(null)</code>, <code>ref&lt;Task[]&gt;([])</code>. Если вызвать <code>ref&lt;Task&gt;()</code> без аргумента, тип будет <code>Ref&lt;Task | undefined&gt;</code>.</p>\n<p>Шаблонные ref в Vue 3.5 получают через <code>useTemplateRef&lt;T&gt;('имя')</code>. Тип значения всегда включает <code>null</code>: до монтирования и при <code>v-if=\"false\"</code> элемента нет, поэтому обращаться нужно через <code>?.</code>. Для DOM-элемента пишут <code>HTMLInputElement</code>, а для дочернего компонента — <code>InstanceType&lt;typeof TaskForm&gt;</code>. Учтите, что снаружи доступно только то, что компонент открыл через <code>defineExpose</code>.</p>\n<h3>provide/inject и composables</h3>\n<p>Обычный <code>inject('table')</code> возвращает <code>unknown</code>: компилятор не знает, что положили под строковым ключом. Решение — <b>InjectionKey&lt;T&gt;</b>: это Symbol, который «несёт» тип значения. <code>provide</code> проверит, что вы кладёте значение нужной формы, а <code>inject</code> вернёт <code>T | undefined</code> (undefined — потому что провайдера может не оказаться выше по дереву).</p>\n<div class=\"code-label\">keys.ts</div><pre class=\"code\"><span class=\"c\">// keys.ts — ключ несёт тип значения</span>\nimport type { InjectionKey, Ref } from 'vue'\n\nexport interface TableContext {\n  selectedIds: Ref&lt;Set&lt;number&gt;&gt;\n  toggle: (id: number) =&gt; void\n}\nexport const tableKey: InjectionKey&lt;TableContext&gt; = Symbol('table')\n\n<span class=\"c\">// DataTable.vue</span>\n<span class=\"c\">// provide(tableKey, { selectedIds, toggle })      — проверка формы значения</span>\n\n<span class=\"c\">// TableRow.vue</span>\n<span class=\"c\">// const ctx = inject(tableKey)                    // TableContext | undefined</span>\n<span class=\"c\">// const ctx = inject(tableKey)!                   // если уверены, что провайдер есть</span>\n<span class=\"c\">// Надёжнее — функция-обёртка с понятной ошибкой:</span>\nimport { inject } from 'vue'\nexport function useTable(): TableContext {\n  const ctx = inject(tableKey)\n  if (!ctx) throw new Error('useTable вызван вне DataTable')\n  return ctx\n}</pre>\n<p>Обёртка <code>useTable()</code> убирает <code>undefined</code> честно — проверкой с понятной ошибкой, а не восклицательным знаком.</p>\n<p><b>Composables</b> типизируются как обычные функции. Возвращаемый тип обычно выводится, а дженерик позволяет вызывающему коду указать тип данных. Принимать параметры удобно в виде <code>MaybeRefOrGetter&lt;T&gt;</code> и разворачивать через <code>toValue()</code> — тогда composable работает и с обычным значением, и с ref, и с геттером.</p>\n<div class=\"code-label\">useFetch.ts</div><pre class=\"code\"><span class=\"c\">// composables/useFetch.ts — дженерик-composable</span>\nimport { ref, shallowRef, toValue, watchEffect, type MaybeRefOrGetter, type Ref } from 'vue'\n\nexport function useFetch&lt;T&gt;(url: MaybeRefOrGetter&lt;string&gt;) {\n  const data = shallowRef&lt;T | null&gt;(null)\n  const error = ref&lt;string | null&gt;(null)\n  const loading = ref(false)\n\n  watchEffect(async () =&gt; {\n    loading.value = true\n    error.value = null\n    try {\n      const res = await fetch(toValue(url))\n      if (!res.ok) throw new Error(res.statusText)\n      data.value = (await res.json()) as T <span class=\"c\">// каст: TS не знает, что пришло</span>\n    } catch (e) {\n      error.value = e instanceof Error ? e.message : String(e)\n    } finally {\n      loading.value = false\n    }\n  })\n\n  return { data, error, loading } <span class=\"c\">// типы выводятся, Ref&lt;T | null&gt; и т.д.</span>\n}\n\n<span class=\"c\">// В компоненте:</span>\n<span class=\"c\">// const { data } = useFetch&lt;Project[]&gt;(() =&gt; `/api/projects?page=${page.value}`)</span></pre>\n<p><b>Pinia</b> в setup-синтаксисе (<code>defineStore('tasks', () =&gt; { ... })</code>) выводит типы state, getters и actions из возвращаемых ref, computed и функций — обычно ничего дописывать не нужно, достаточно типизировать сами ref. При деструктуризации стора используйте <code>storeToRefs</code>, чтобы сохранить и реактивность, и типы.</p>\n<h3>Дженерик-компоненты, satisfies и vue-tsc</h3>\n<p>С Vue 3.3 компонент может быть дженериком: атрибут <code>generic=\"T extends ...\"</code> у <code>&lt;script setup&gt;</code> объявляет параметр типа. Тип <code>T</code> выводится из переданных пропсов, и слоты, события и v-model получают точный тип. Это идеально для переиспользуемых таблиц, списков и селектов.</p>\n<div class=\"code-label\">SelectList.vue</div><pre class=\"code\">&lt;!-- SelectList.vue — дженерик-компонент --&gt;\n&lt;script setup lang=\"ts\" generic=\"T extends { id: number | string }\"&gt;\ndefineProps&lt;{\n  items: T[]\n  label: (item: T) =&gt; string\n}&gt;()\nconst selected = defineModel&lt;T | null&gt;({ default: null })\n&lt;/script&gt;\n\n&lt;template&gt;\n  &lt;ul&gt;\n    &lt;li v-for=\"item in items\" :key=\"item.id\" @click=\"selected = item\"&gt;\n      {{ label(item) }}\n    &lt;/li&gt;\n  &lt;/ul&gt;\n&lt;/template&gt;\n\n&lt;!-- Использование: T выводится из items --&gt;\n&lt;!-- &lt;SelectList :items=\"projects\" :label=\"(p) =&gt; p.title\" v-model=\"current\" /&gt; --&gt;\n&lt;!-- p: Project, current должен быть Ref&lt;Project | null&gt; --&gt;</pre>\n<p>Оператор <b>satisfies</b> (TS 4.9) часто встречается в конфигурациях: маршрутах, колонках таблицы, словарях. Он проверяет, что значение подходит под тип, но <b>не заменяет</b> выведенный тип на указанный. С аннотацией <code>Record&lt;string, Route&gt;</code> вы теряете знание о конкретных ключах, с <code>satisfies</code> — нет.</p>\n<pre class=\"code\">type Route = { path: string; auth?: boolean }\n\n<span class=\"c\">// Аннотация: тип «расширяется» до Record&lt;string, Route&gt;</span>\nconst routesA: Record&lt;string, Route&gt; = {\n  home: { path: '/' },\n  projects: { path: '/projects', auth: true },\n}\nroutesA.hme        <span class=\"c\">// нет ошибки — ключ любой строки</span>\n<span class=\"c\">// satisfies: проверка формы БЕЗ потери точного типа</span>\nconst routes = {\n  home: { path: '/' },\n  projects: { path: '/projects', auth: true },\n} satisfies Record&lt;string, Route&gt;\n\nroutes.projects.auth <span class=\"c\">// boolean — известно точно</span>\n<span class=\"c\">// routes.hme         // Ошибка: такого ключа нет</span>\ntype RouteName = keyof typeof routes <span class=\"c\">// 'home' | 'projects'</span></pre>\n<p>И главное, о чём спрашивают: <b>кто проверяет типы</b>. Vite при разработке и сборке через esbuild просто вырезает типы и ничего не проверяет — проект с ошибками типов запустится. Обычный <code>tsc</code> не умеет читать <code>.vue</code>-файлы. Поэтому в Vue-проектах используют <b>vue-tsc</b> (часть Vue Language Tools): он проверяет и скрипты, и выражения в шаблонах. В шаблоне сборки обычно стоит <code>vue-tsc --build &amp;&amp; vite build</code>, а в CI — отдельный шаг <code>vue-tsc --noEmit</code>.</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Редактор</b><span>Vue - Official, подсказки и ошибки</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step bad\"><b>vite dev</b><span>типы вырезаются, без проверки</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>vue-tsc</b><span>проверка script и template</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step good\"><b>CI</b><span>упавшая проверка блокирует merge</span></div></div></figure>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Пропсы описываю через defineProps с дженериком; компилятор Vue сам генерирует по типу runtime-объявление. Дефолты в Vue 3.5 задаю деструктуризацией, раньше — через withDefaults. События — defineEmits с кортежами аргументов, v-model — defineModel. У ref указываю дженерик, когда начальное значение null или пустой массив. Для provide/inject использую InjectionKey, для переиспользуемых списков — generic-компоненты. Vite типы не проверяет, поэтому в CI обязательно запускается vue-tsc.»</div>"
+    }
+  ],
+  "quizVariants": [
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Зачем писать T extends { id: number } в параметре дженерика?",
+        "options": [
+          "Чтобы T наследовал класс и получил его поле id",
+          "Чтобы ограничить T типами, у которых есть поле id",
+          "Чтобы задать { id: number } значением T по умолчанию",
+          "Чтобы T стал union с типом { id: number }"
+        ],
+        "answer": 1,
+        "explanation": "Без ограничения о T ничего не известно, и обращение к .id даёт ошибку. extends задаёт минимальную форму, которую обязан иметь тип: внутри функции можно обращаться к item.id, а снаружи нельзя передать объекты без id. Конкретный тип по-прежнему выводится из аргумента."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Что произойдёт на последней строке?",
+        "code": "function getField<T, K extends keyof T>(obj: T, key: K): T[K] {\n  return obj[key]\n}\nconst task = { id: 1, title: 'A', done: false }\ngetField(task, 'name')",
+        "options": [
+          "Вернётся undefined: поля name в объекте нет",
+          "Ошибка компиляции: 'name' не входит в keyof T",
+          "Вызов скомпилируется, результат будет типа unknown",
+          "Ошибка в рантайме при обращении к несуществующему полю"
+        ],
+        "answer": 1,
+        "explanation": "K ограничен keyof T, то есть union ключей объекта: 'id' | 'title' | 'done'. Строка name туда не входит, поэтому вызов не скомпилируется. Это и есть смысл связки K extends keyof T."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Какой тип вернёт вызов?",
+        "code": "function first<T>(list: T[]): T | undefined {\n  return list[0]\n}\nconst x = first([1, 'a'])",
+        "options": [
+          "number | undefined",
+          "string | number | undefined",
+          "(string | number)[] | undefined",
+          "unknown"
+        ],
+        "answer": 1,
+        "explanation": "Массив [1, \"a\"] выводится как (string | number)[], поэтому T = string | number, и к нему добавляется undefined из сигнатуры."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Какой тип лучше подходит для данных формы создания пользователя, если id выдаёт сервер?",
+        "options": [
+          "Partial<User>",
+          "Omit<User, 'id'>",
+          "Pick<User, 'id'>",
+          "Required<User>"
+        ],
+        "answer": 1,
+        "explanation": "Omit убирает перечисленные ключи и оставляет остальные с прежней обязательностью. Partial сделал бы необязательными все поля, и форма без имени тоже прошла бы проверку."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Как получить тип данных, которые возвращает async-функция fetchUser?",
+        "options": [
+          "ReturnType<typeof fetchUser>",
+          "Awaited<ReturnType<typeof fetchUser>>",
+          "Awaited<typeof fetchUser>",
+          "Parameters<typeof fetchUser>"
+        ],
+        "answer": 1,
+        "explanation": "ReturnType даст Promise<User>, а Awaited разворачивает промис (в том числе вложенный) до значения. typeof нужен, потому что fetchUser — значение, а утилиты принимают типы."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Скомпилируется ли присваивание?",
+        "code": "type Filters = { range: { from: string; to: string }; search: string }\nconst f: Partial<Filters> = { range: { from: '2026-01-01' } }",
+        "options": [
+          "Да, Partial делает необязательными все поля на любой глубине",
+          "Нет: Partial поверхностный, в range нужно поле to",
+          "Нет: Partial нельзя применять к вложенным объектам",
+          "Да, но range станет any и проверка пропадёт"
+        ],
+        "answer": 1,
+        "explanation": "Встроенные утилиты работают только на первом уровне: внутри range поле to по-прежнему обязательно. Для глубокой необязательности пишут свой рекурсивный DeepPartial на mapped types."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Что сообщает компилятору сигнатура function isProject(v: unknown): v is Project?",
+        "options": [
+          "Что функция преобразует v в Project и вернёт его",
+          "Что при true внутри if переменная v имеет тип Project",
+          "Что функция бросит ошибку, если v не Project",
+          "Что Project проверяется автоматически по интерфейсу в рантайме"
+        ],
+        "answer": 1,
+        "explanation": "Type predicate — обещание разработчика: компилятор верит на слово и не проверяет тело функции. Если проверка внутри написана неправильно, компилятор этого не заметит. Бросать ошибку — это поведение asserts, а не is."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "В тип добавили вариант { status: 'empty' }. Что произойдёт с этим кодом?",
+        "code": "function label(s: LoadState): string {\n  switch (s.status) {\n    case 'idle': return 'Ожидание'\n    case 'loading': return 'Загрузка'\n    case 'success': return 'Готово'\n    case 'error': return s.error\n    default: return assertNever(s)\n  }\n}",
+        "options": [
+          "Ничего, ветка default обработает новый вариант без ошибок",
+          "Ошибка компиляции в default: s больше не имеет тип never",
+          "Ошибка возникнет только в рантайме, когда придёт status: 'empty'",
+          "TS автоматически добавит case для нового варианта"
+        ],
+        "answer": 1,
+        "explanation": "В default попадают все необработанные варианты. Пока их нет, тип s — never. Новый вариант делает тип непустым, и вызов assertNever(s) перестаёт компилироваться: аргумент типа { status: 'empty' } нельзя передать в параметр never. Так проверка исчерпанности напоминает обработать новый случай."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что Vue делает с defineProps<Props>() при компиляции SFC?",
+        "options": [
+          "Ничего, проверка пропсов есть только в TypeScript",
+          "Генерирует по типу runtime-объявление props",
+          "Отправляет тип в vue-tsc для проверки при сборке",
+          "Превращает Props в класс с геттерами"
+        ],
+        "answer": 1,
+        "explanation": "Компилятор SFC читает тип и строит обычный объект props (имена, Boolean/String и обязательность), поэтому тип должен быть статически анализируемым: компилятор понимает интерфейсы и импорты, но не всякий вычисляемый тип. Полноценную проверку типов делает vue-tsc, а не сборка."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Зачем в проекте на Vue нужен vue-tsc?",
+        "options": [
+          "Он ускоряет сборку Vite за счёт кэша типов",
+          "Vite не проверяет типы, а tsc не понимает .vue",
+          "Он генерирует d.ts для API по ответам сервера",
+          "Он нужен только для SSR, чтобы типизировать серверный код"
+        ],
+        "answer": 1,
+        "explanation": "Vite (через esbuild) транспилирует TS без проверки, а обычный tsc не понимает .vue. Поэтому в CI и в скрипте build запускают vue-tsc --noEmit, который ловит ошибки и в script setup, и в шаблонах."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Почему tasks.value.push(task) даёт ошибку?",
+        "code": "interface Task { id: number; title: string }\nconst tasks = ref([])\n\nfunction add(task: Task) {\n  tasks.value.push(task)\n}",
+        "options": [
+          "ref нельзя мутировать через push, только присваиванием",
+          "Из [] выведен Ref<never[]>, нужен ref<Task[]>([])",
+          "Нужно использовать reactive вместо ref для массивов",
+          "Нужно писать tasks.push без .value: ref разворачивается сам"
+        ],
+        "answer": 1,
+        "explanation": "Из пустого литерала [] внутри ref TypeScript выводит never[], и в такой массив ничего нельзя положить. Начальное значение не описывает будущие данные, поэтому дженерик нужно указать явно."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Чем отличаются routesA и routesB?",
+        "code": "type Route = { path: string; auth?: boolean }\nconst routesA: Record<string, Route> = { home: { path: '/' } }\nconst routesB = { home: { path: '/' } } satisfies Record<string, Route>",
+        "options": [
+          "Ничем, оба варианта дают одинаковый тип",
+          "routesB.hme — ошибка, routesA.hme — нет: satisfies сохраняет ключи",
+          "routesB не проверяется на соответствие Route, это просто подсказка",
+          "satisfies работает только с as const, иначе он игнорируется"
+        ],
+        "answer": 1,
+        "explanation": "Аннотация заменяет выведенный тип на указанный (Record<string, Route>), и информация о конкретных ключах теряется, поэтому routesA.hme не даёт ошибки. satisfies только проверяет совместимость, а тип переменной остаётся выведенным с ключом home."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Когда дженерик в сигнатуре функции лишний?",
+        "options": [
+          "Когда параметр типа встречается в сигнатуре только один раз",
+          "Когда функция принимает больше одного аргумента",
+          "Когда тип можно вывести из аргумента без явного указания",
+          "Когда функция возвращает Promise, а не обычное значение"
+        ],
+        "answer": 0,
+        "explanation": "Дженерик оправдан, если T связывает хотя бы два места: вход и выход или два аргумента. function log<T>(value: T): void ничем не лучше log(value: unknown), а вывод T из аргумента — как раз обычный сценарий для дженерика."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Какой тип у переменной r?",
+        "code": "function getField<T, K extends keyof T>(obj: T, key: K): T[K] {\n  return obj[key]\n}\nconst task = { id: 1, title: 'A', done: false }\nconst r = getField(task, 'done')",
+        "options": [
+          "unknown",
+          "string | number | boolean",
+          "boolean",
+          "'done'"
+        ],
+        "answer": 2,
+        "explanation": "K выводится как литерал 'done', а T[K] — тип значения по этому ключу, то есть boolean. Union всех значений получился бы, если бы key имел тип keyof T, а не конкретный литерал."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Что произойдёт на последней строке?",
+        "code": "interface Paginated<T = unknown> { items: T[]; next: string | null }\n\nconst page: Paginated = { items: [{ id: 1 }], next: null }\npage.items[0].id",
+        "options": [
+          "Всё скомпилируется: T выведется из значения items",
+          "Ошибка компиляции: у Paginated не передан обязательный T",
+          "Всё скомпилируется: без аргумента T становится any",
+          "Ошибка компиляции: элементы items имеют тип unknown"
+        ],
+        "answer": 3,
+        "explanation": "У аннотации типа нет вывода из значения: Paginated без аргумента — это Paginated<unknown>, и обратиться к полю значения unknown нельзя. Передавать T не обязательно именно благодаря значению по умолчанию."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Чем Omit отличается от Exclude?",
+        "options": [
+          "Omit работает только с интерфейсами, Exclude — с type",
+          "Omit убирает ключи из объекта, Exclude — члены из union",
+          "Omit убирает поля глубоко, Exclude — только на первом уровне",
+          "Ничем: это два названия одной и той же утилиты"
+        ],
+        "answer": 1,
+        "explanation": "Omit<T, K> принимает тип объекта и возвращает объект без указанных ключей. Exclude<T, U> фильтрует члены union и возвращает union."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Какой тип удобнее для аргумента patch в функции updateUser(id, patch), которая меняет только переданные поля?",
+        "options": [
+          "Required<User>",
+          "Pick<User, 'name'>",
+          "Partial<User>",
+          "Readonly<User>"
+        ],
+        "answer": 2,
+        "explanation": "Partial делает все поля необязательными, поэтому можно передать только { name } или только { email }. Readonly запрещает присваивание, но оставляет поля обязательными."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Что скажет компилятор?",
+        "code": "type Role = 'admin' | 'user' | 'guest'\n\nconst roleLabels: Record<Role, string> = {\n  admin: 'Администратор',\n  user: 'Пользователь',\n}",
+        "options": [
+          "Ошибка: в объекте не хватает ключа guest",
+          "Ничего: ключи Record всегда необязательны",
+          "Ничего: guest будет undefined при обращении",
+          "Ошибка: Record принимает в ключах только string"
+        ],
+        "answer": 0,
+        "explanation": "Если K в Record<K, V> — union литералов, все ключи обязательны. Так компилятор напоминает добавить подпись, когда в union появляется новая роль."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Что означает сигнатура function assertDefined<T>(v: T): asserts v is NonNullable<T>?",
+        "options": [
+          "Функция возвращает true, если v не null и не undefined",
+          "Функция либо бросает, либо после вызова тип v сужен",
+          "Функция в рантайме удаляет null из значения v",
+          "Компилятор сам проверит тело и добавит throw"
+        ],
+        "answer": 1,
+        "explanation": "Assertion function ничего не возвращает: если она завершилась без исключения, компилятор считает v суженным до конца блока. Возврат boolean с сужением внутри if — это поведение предиката v is T."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Почему data.title подчёркнуто ошибкой?",
+        "code": "function isProject(value: unknown): boolean {\n  return typeof value === 'object' && value !== null && 'title' in value\n}\n\nconst data: unknown = await loadProject()\nif (isProject(data)) {\n  console.log(data.title)\n}",
+        "options": [
+          "Проверка 'title' in value не работает с unknown до TS 6",
+          "Внутри if нужно писать data!.title из-за strictNullChecks",
+          "await нельзя использовать с переменной типа unknown",
+          "Тип результата boolean не сужает data, нужен value is Project"
+        ],
+        "answer": 3,
+        "explanation": "Функция с типом результата boolean ничего не сообщает компилятору, и после if data остаётся unknown. Нужен предикат value is Project; явная аннотация boolean к тому же отключает автоматический вывод предиката из TS 5.5."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Зачем при provide/inject использовать ключ типа InjectionKey<T> вместо строки?",
+        "options": [
+          "Ключ-Symbol несёт тип, и inject вернёт T | undefined",
+          "Со строковым ключом provide не работает в Vue 3.5",
+          "InjectionKey гарантирует, что провайдер найдётся всегда",
+          "Строковые ключи нельзя передавать между файлами"
+        ],
+        "answer": 0,
+        "explanation": "inject('table') со строкой возвращает unknown, а InjectionKey<T> связывает ключ с типом значения: provide проверит форму, inject вернёт T | undefined. undefined остаётся, потому что провайдера выше по дереву может не оказаться."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что нужно сделать, чтобы у setup-стора Pinia были типизированы state, getters и actions?",
+        "options": [
+          "Описать отдельный интерфейс State и передать его в defineStore",
+          "Подключить плагин pinia-types, иначе всё будет any",
+          "Обычно ничего: типы выводятся из возвращаемых ref и функций",
+          "Объявить стор через class и декораторы @State и @Action"
+        ],
+        "answer": 2,
+        "explanation": "В setup-синтаксисе стор — обычная функция, и TypeScript выводит типы state, getters и actions из того, что она возвращает. Достаточно типизировать сами ref, например ref<Task[]>([])."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "В чём ошибка?",
+        "code": "interface User { id: number; name: string }\nconst user = ref(null)\n\nasync function load() {\n  user.value = await api.getUser() // Promise<User>\n}",
+        "options": [
+          "ref не принимает null, начальное значение обязательно",
+          "Присваивать user.value нельзя внутри async-функции",
+          "Из null выведен Ref<null>, нужно ref<User | null>(null)",
+          "Нужно писать user = await ..., без .value"
+        ],
+        "answer": 2,
+        "explanation": "ref выводит тип из начального значения, и из null получается Ref<null> — объект User туда не положить. Если начальное значение не описывает будущие данные, дженерик указывают явно."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Что не так с этим watch?",
+        "code": "<script setup lang=\"ts\">\nconst { size = 'md' } = defineProps<{ size?: 'sm' | 'md' | 'lg' }>()\n\nwatch(size, (v) => console.log(v))\n</script>",
+        "options": [
+          "watch не умеет следить за пропсами, только за ref",
+          "size передан как значение, нужен геттер () => size",
+          "Деструктуризация пропсов всегда теряет реактивность",
+          "Нужно указать тип явно: watch<string>(size, ...)"
+        ],
+        "answer": 1,
+        "explanation": "Компилятор заменяет обращения к size на props.size, но в watch(size) уйдёт текущее значение, а не реактивный источник. Оборачивайте в геттер: watch(() => size, ...); в computed и шаблоне деструктуризация остаётся реактивной."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Что даёт keyof Task для interface Task { id: number; title: string; done: boolean }?",
+        "options": [
+          "Union значений: number | string | boolean",
+          "Массив строк ['id', 'title', 'done'] в рантайме",
+          "Union ключей: 'id' | 'title' | 'done'",
+          "Тип string, потому что ключи объекта — строки"
+        ],
+        "answer": 2,
+        "explanation": "keyof работает только на уровне типов и возвращает union литералов-ключей. Union значений даёт индексный доступ Task[keyof Task], а в рантайме keyof не существует."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Скомпилируется ли обращение t?.title?",
+        "code": "function byId<T extends { id: number }>(list: T[], id: number): T | undefined {\n  return list.find((item) => item.id === id)\n}\nconst tasks = [{ id: 1, title: 'A', done: false }]\nconst t = byId(tasks, 1)\nt?.title",
+        "options": [
+          "Да: T выведен как полный тип задачи со всеми полями",
+          "Нет: тип результата — { id: number } | undefined",
+          "Нет: ограничение extends обрезает лишние поля",
+          "Да, но только при явном вызове byId<Task>(tasks, 1)"
+        ],
+        "answer": 0,
+        "explanation": "Ограничение — нижняя планка, а не точный тип: T выводится из аргумента как { id: number; title: string; done: boolean }. Поэтому результат сохраняет все поля, и явный аргумент типа не нужен."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Что произойдёт на последней строке?",
+        "code": "function createStore<T>() {\n  let value: T | undefined\n  return { get: () => value, set: (v: T) => { value = v } }\n}\nconst store = createStore()\nstore.set({ id: 1 })\nstore.get()?.id",
+        "options": [
+          "Всё скомпилируется: T выведется из вызова set",
+          "Всё скомпилируется: без аргумента T становится any",
+          "Ошибка уже на createStore(): T обязателен",
+          "Ошибка: T не из чего вывести, и он стал unknown"
+        ],
+        "answer": 3,
+        "explanation": "При вызове без аргументов выводить T не из чего, и он становится unknown. Последующий set на вывод уже не влияет, поэтому в таких случаях T указывают явно: createStore<{ id: number }>()."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что возвращает Parameters<typeof fetchUser> для async function fetchUser(id: number, withProjects = false)?",
+        "options": [
+          "Объект { id: number; withProjects: boolean }",
+          "Кортеж [id: number, withProjects?: boolean]",
+          "Union number | boolean из типов параметров",
+          "Promise с кортежем, потому что функция async"
+        ],
+        "answer": 1,
+        "explanation": "Parameters возвращает кортеж типов параметров, и параметр со значением по умолчанию в нём необязателен. async влияет только на тип результата, а не на параметры."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что получится из NonNullable<string | null | undefined>?",
+        "options": [
+          "string",
+          "string | undefined",
+          "string | null",
+          "never"
+        ],
+        "answer": 0,
+        "explanation": "NonNullable убирает из union и null, и undefined. never получился бы, только если бы в union не осталось ни одного члена."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Какой тип получится у Finished?",
+        "code": "type Status = 'idle' | 'loading' | 'success' | 'error'\ntype Finished = Extract<Status, 'success' | 'error' | 'cancelled'>",
+        "options": [
+          "'success' | 'error' | 'cancelled'",
+          "'idle' | 'loading'",
+          "'success' | 'error'",
+          "Ошибка: 'cancelled' нет в Status"
+        ],
+        "answer": 2,
+        "explanation": "Extract оставляет только те члены Status, которые совместимы с U; лишний 'cancelled' ни с чем не совпадает и ошибки не вызывает. 'idle' | 'loading' дал бы Exclude."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Что делает union вида { status: 'idle' } | { status: 'success'; data: T } дискриминированным?",
+        "options": [
+          "То, что варианты объявлены через type, а не interface",
+          "Наличие поля data хотя бы в одном из вариантов",
+          "То, что union обёрнут в дженерик с параметром T",
+          "Общее поле status с литеральным типом в каждом варианте"
+        ],
+        "answer": 3,
+        "explanation": "Метка — общее поле с уникальным литеральным типом в каждом варианте: проверка state.status === 'success' сужает весь объект до одного варианта. Способ объявления и дженерик на это не влияют."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Какой тип у ids в TypeScript 5.5+?",
+        "code": "const ids = [1, null, 3, null].filter((x) => x !== null)",
+        "options": [
+          "(number | null)[]",
+          "number[]",
+          "unknown[]",
+          "(number | undefined)[]"
+        ],
+        "answer": 1,
+        "explanation": "С TS 5.5 компилятор сам выводит предикат x is number у простой стрелочной функции, и filter сужает тип массива. Раньше результатом был (number | null)[], и предикат писали вручную."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что объявляет defineModel<string>('query') в дочернем компоненте?",
+        "options": [
+          "Пропс query и событие update:query, и возвращает ref",
+          "Только пропс query, событие нужно объявить отдельно",
+          "Локальный ref, который никак не связан с родителем",
+          "Глобальное состояние, общее для всех экземпляров"
+        ],
+        "answer": 0,
+        "explanation": "defineModel (Vue 3.4+) одной строкой объявляет пропс и событие для v-model:query. Возвращённый ref можно читать и присваивать, а присваивание отправит событие родителю."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Для чего у <script setup lang=\"ts\"> атрибут generic=\"T extends { id: number }\"?",
+        "options": [
+          "Чтобы компонент принимал любые пропсы без проверки",
+          "Чтобы задать единый тип для всех ref в компоненте",
+          "Чтобы объявить параметр типа, выводимый из пропсов",
+          "Чтобы Vue в рантайме проверял пропсы по типу T"
+        ],
+        "answer": 2,
+        "explanation": "Дженерик-компонент (Vue 3.3+) получает параметр типа T, который выводится из переданных пропсов, например items. Слоты, события и v-model тоже получают точный тип; в рантайме типы не проверяются."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Почему vue-tsc ругается на input.value.focus()?",
+        "code": "const input = useTemplateRef<HTMLInputElement>('search')\n\nonMounted(() => {\n  input.value.focus()\n})",
+        "options": [
+          "В onMounted шаблонные ref ещё недоступны",
+          "Значение может быть null, нужен вызов через ?.",
+          "Нужен тип HTMLElement вместо HTMLInputElement",
+          "useTemplateRef возвращает элемент без обёртки .value"
+        ],
+        "answer": 1,
+        "explanation": "Тип useTemplateRef всегда включает null: до монтирования и при v-if=\"false\" элемента нет. Компилятор не знает, что в onMounted элемент уже существует, поэтому нужен ?. или проверка."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Почему form.value?.reset() не компилируется?",
+        "code": "// TaskForm.vue\n<script setup lang=\"ts\">\nfunction reset() { /* очистка полей */ }\n</script>\n\n// Parent.vue\nconst form = useTemplateRef<InstanceType<typeof TaskForm>>('form')\nform.value?.reset()",
+        "options": [
+          "Методы дочернего компонента вызывать нельзя никогда",
+          "InstanceType не работает с .vue-файлами",
+          "Нужно вызывать form.reset() без .value",
+          "TaskForm не открыл reset через defineExpose"
+        ],
+        "answer": 3,
+        "explanation": "Компонент на <script setup> по умолчанию закрыт: через шаблонный ref снаружи доступно только то, что передано в defineExpose({ reset }). Тип InstanceType<typeof TaskForm> это учитывает."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Что делает модификатор const в function f<const T>(x: T)?",
+        "options": [
+          "Запрещает менять аргумент x внутри тела функции",
+          "Делает T обязательным для явного указания при вызове",
+          "Замораживает аргумент через Object.freeze в рантайме",
+          "Выводит литеральные типы, как будто аргумент записан с as const"
+        ],
+        "answer": 3,
+        "explanation": "const у параметра типа (TS 5.0) заставляет выводить самый узкий тип: f(['a', 'b']) даст readonly ['a', 'b'], а не string[]. На рантайм и изменяемость x он не влияет."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Что скажет компилятор?",
+        "code": "function merge<T>(a: T, b: T): T[] {\n  return [a, b]\n}\nmerge(1, 'x')",
+        "options": [
+          "Ничего: T выведется как string | number",
+          "Ничего: T станет unknown, раз типы разные",
+          "Ошибка: T выведен как number, и 'x' не подходит",
+          "Ошибка: у дженерика два аргумента одного T"
+        ],
+        "answer": 2,
+        "explanation": "Из нескольких кандидатов компилятор не строит union для T автоматически: T выводится как number, и второй аргумент не проходит проверку. Если union действительно нужен, его указывают явно: merge<string | number>(1, 'x')."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Что произойдёт, если сервер вернёт другую форму данных?",
+        "code": "async function getList<T>(url: string): Promise<T[]> {\n  const res = await fetch(url)\n  return res.json()\n}\nconst projects = await getList<Project>('/api/projects')\n// сервер прислал [{ id: 1, name: 'A' }] вместо поля title",
+        "options": [
+          "Ошибки не будет: дженерик лишь подписывает тип ответа",
+          "getList бросит ошибку: ответ не совпал с типом Project",
+          "TypeScript проверит JSON при сборке по примеру ответа",
+          "Поле name автоматически переименуется в title"
+        ],
+        "answer": 0,
+        "explanation": "res.json() возвращает any, и дженерик просто подписывает результат типом Project[]. В рантайме типов нет, поэтому projects[0].title окажется undefined без всякой ошибки; для проверки нужна валидация ответа."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что будет с типом Omit<User, 'idd'>, если ключа idd в User нет?",
+        "options": [
+          "Ошибка компиляции: такого ключа нет в User",
+          "Ошибки нет, вернётся исходный тип User",
+          "Получится пустой объектный тип {}",
+          "Получится never, потому что ключ не найден"
+        ],
+        "answer": 1,
+        "explanation": "Omit не требует, чтобы K был ключом T, поэтому опечатка проходит молча и ничего не убирает. Pick, наоборот, проверяет ключи, и Pick<User, 'idd'> не скомпилируется."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Какая утилита подходит для типа строки таблицы, где нужны только id, name и role из User?",
+        "options": [
+          "Omit<User, 'id' | 'name' | 'role'>",
+          "Extract<User, 'id' | 'name' | 'role'>",
+          "Record<'id' | 'name' | 'role', User>",
+          "Pick<User, 'id' | 'name' | 'role'>"
+        ],
+        "answer": 3,
+        "explanation": "Pick оставляет только перечисленные ключи с их типами. Omit сделал бы обратное, а Extract работает с членами union, а не с полями объекта."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Почему последняя строка не компилируется?",
+        "code": "async function fetchUser(id: number) {\n  return { id, name: 'Аня' }\n}\ntype Result = ReturnType<fetchUser>",
+        "options": [
+          "ReturnType не умеет работать с async-функциями",
+          "Для async-функции нужно писать Awaited<fetchUser>",
+          "fetchUser — значение: нужен typeof fetchUser",
+          "ReturnType принимает только стрелочные функции"
+        ],
+        "answer": 2,
+        "explanation": "Утилиты принимают типы, а fetchUser — значение, поэтому сначала получают его тип оператором typeof. ReturnType<typeof fetchUser> даст промис, а Awaited развернёт его до объекта."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Что произойдёт, если в теле type guard isProject(v): v is Project написать просто return true?",
+        "options": [
+          "Ошибка компиляции: тело не проверяет поля Project",
+          "Компилятор поверит и сузит любой v до Project",
+          "TypeScript добавит недостающие проверки при сборке",
+          "Предикат будет проигнорирован, v останется unknown"
+        ],
+        "answer": 1,
+        "explanation": "Компилятор не сверяет тело с предикатом: guard — это по сути as, спрятанный в функцию. Поэтому проверку внутри нужно писать честно и покрывать тестами."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Что скажет компилятор?",
+        "code": "type LoadState =\n  | { status: 'loading' }\n  | { status: 'success'; data: string[] }\n  | { status: 'error'; error: string }\n\nfunction render(s: LoadState) {\n  if (s.status === 'error') {\n    return s.error + ' / ' + s.data.length\n  }\n}",
+        "options": [
+          "Ничего: data вернёт undefined, и это не ошибка",
+          "Ошибка: s.error нельзя читать без проверки in",
+          "Ничего: после сужения доступны поля всех вариантов",
+          "Ошибка: в варианте error нет поля data"
+        ],
+        "answer": 3,
+        "explanation": "Проверка метки сужает s до варианта { status: 'error'; error: string }, где поля data нет. Так discriminated union делает невозможные комбинации невыразимыми."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Зачем composable принимать параметр как MaybeRefOrGetter<string> и читать его через toValue()?",
+        "options": [
+          "Чтобы работать и со значением, и с ref, и с геттером",
+          "Чтобы параметр стал глубоко реактивным через reactive",
+          "Чтобы TypeScript разрешил передавать в функцию any",
+          "Чтобы composable можно было вызывать вне setup"
+        ],
+        "answer": 0,
+        "explanation": "MaybeRefOrGetter<T> — это T | Ref<T> | (() => T), а toValue() разворачивает любой из вариантов. Если вызывать toValue внутри watchEffect, composable отреагирует на изменение ref или геттера."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Какой тип у const task = ref<Task>() без аргумента?",
+        "options": [
+          "Ref<Task>",
+          "Ref<Task | null>",
+          "Ref<Task | undefined>",
+          "Ref<Partial<Task>>"
+        ],
+        "answer": 2,
+        "explanation": "Перегрузка ref<T>() без начального значения возвращает Ref<T | undefined>: значения пока нет. Поэтому перед обращением к полям нужна проверка или ?."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Почему ctx.toggle подчёркнуто ошибкой и как это лучше исправить?",
+        "code": "// keys.ts\nexport const tableKey: InjectionKey<TableContext> = Symbol('table')\n\n// TableRow.vue\nconst ctx = inject(tableKey)\nctx.toggle(props.id)",
+        "options": [
+          "Symbol нельзя использовать как ключ, нужна строка 'table'",
+          "Возможен undefined: проверить в обёртке с понятной ошибкой",
+          "inject вернул unknown, нужно привести через as TableContext",
+          "toggle потерял this, нужно вызывать через ctx.toggle.call"
+        ],
+        "answer": 1,
+        "explanation": "С InjectionKey inject возвращает TableContext | undefined: провайдера выше по дереву может не оказаться. Надёжнее функция-обёртка useTable(), которая бросает понятную ошибку, чем восклицательный знак."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Почему vue-tsc ругается на query.value.trim()?",
+        "code": "<script setup lang=\"ts\">\nconst query = defineModel<string>('query')\nconst trimmed = computed(() => query.value.trim())\n</script>",
+        "options": [
+          "Без default или required тип — string | undefined",
+          "defineModel возвращает строку, а не ref, .value лишний",
+          "computed нельзя строить на основе defineModel",
+          "Имя модели query конфликтует с пропсом по умолчанию"
+        ],
+        "answer": 0,
+        "explanation": "Родитель может не передать v-model:query, поэтому defineModel<string>() без опций даёт ref типа string | undefined. С { default: '' } или { required: true } тип станет string."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Зачем в сигнатуре function createFSM<S extends string>(states: S[], initial: NoInfer<S>) нужен NoInfer?",
+        "options": [
+          "Чтобы initial можно было не передавать при вызове",
+          "Чтобы S выводился только из states, а initial лишь проверялся",
+          "Чтобы S всегда был string, а не union литералов",
+          "Чтобы запретить явный вызов createFSM<'a' | 'b'>"
+        ],
+        "answer": 1,
+        "explanation": "NoInfer (TS 5.4) исключает аргумент из вывода: S берётся из states, а initial обязан быть одним из них. Без NoInfer вызов createFSM(['a', 'b'], 'c') вывел бы S = 'a' | 'b' | 'c' и ошибку бы не нашёл."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Какой тип получится у X?",
+        "code": "interface Task { id: number; title: string; done: boolean }\ntype X = Task['id' | 'done']",
+        "options": [
+          "number | boolean",
+          "{ id: number; done: boolean }",
+          "'id' | 'done'",
+          "Ошибка: в индексе нужен один ключ"
+        ],
+        "answer": 0,
+        "explanation": "Индексный доступ с union ключей возвращает union типов значений по этим ключам. Объект с двумя полями дал бы Pick<Task, 'id' | 'done'>."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Какой тип у r.data?",
+        "code": "interface ApiResponse<T> { data: T; total: number }\ninterface Project { id: number; title: string }\n\nasync function getList<T>(url: string): Promise<ApiResponse<T[]>> {\n  const res = await fetch(url)\n  return res.json()\n}\nconst r = await getList<Project>('/api/projects')",
+        "options": [
+          "Project",
+          "ApiResponse<Project>[]",
+          "any",
+          "Project[]"
+        ],
+        "answer": 3,
+        "explanation": "T = Project, а функция возвращает ApiResponse<T[]>, то есть data: Project[]. any от res.json() скрыт за аннотацией возвращаемого типа и наружу не протекает."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Как встроенный Omit<T, K> выражается через другие утилиты?",
+        "options": [
+          "Exclude<T, Pick<T, K>>",
+          "Partial<Pick<T, K>>",
+          "Pick<T, Exclude<keyof T, K>>",
+          "Pick<T, Extract<keyof T, K>>"
+        ],
+        "answer": 2,
+        "explanation": "Omit берёт все ключи T, убирает из этого union ключи K через Exclude и оставляет остальные через Pick. Вариант с Extract дал бы Pick<T, K>, то есть обратный результат."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что делает Required<User>, если в User есть поле avatar?: string?",
+        "options": [
+          "Делает avatar и все остальные поля обязательными",
+          "Делает обязательным только поле avatar",
+          "Запрещает undefined, но поле остаётся необязательным",
+          "Проверяет в рантайме, что все поля заполнены"
+        ],
+        "answer": 0,
+        "explanation": "Required снимает модификатор ? со всех полей первого уровня, поэтому avatar становится обязательным. В рантайме утилиты типов ничего не проверяют."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Что произойдёт при strict, но без noUncheckedIndexedAccess?",
+        "code": "interface User { id: number; name: string }\n\nconst usersById: Record<number, User> = {}\nconsole.log(usersById[5].name)",
+        "options": [
+          "Ошибка компиляции: ключа 5 в объекте нет",
+          "Скомпилируется, но упадёт в рантайме на чтении name",
+          "Ошибка компиляции: Record требует все числовые ключи",
+          "Скомпилируется и выведет undefined без ошибки"
+        ],
+        "answer": 1,
+        "explanation": "Для широкого ключа вроде number Record не требует ключей, а тип usersById[5] считается просто User. На деле там undefined, и чтение name бросит TypeError; флаг noUncheckedIndexedAccess добавил бы к типу | undefined."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Чем состояние загрузки в виде discriminated union лучше набора полей loading, data и error?",
+        "options": [
+          "Union занимает в рантайме меньше памяти, чем три отдельных поля",
+          "Union позволяет обойтись без проверок в шаблоне вообще",
+          "С флагами TypeScript не умеет выводить тип поля data",
+          "Невозможные комбинации состояний просто не компилируются"
+        ],
+        "answer": 3,
+        "explanation": "Три независимых поля допускают комбинации вроде «идёт загрузка и есть ошибка», и в шаблоне приходится писать data!. В union у каждого состояния свои поля, а проверка status сужает тип; проверки остаются, но становятся точными."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Почему вызов assertString(input) не компилируется?",
+        "code": "const assertString = (v: unknown): asserts v is string => {\n  if (typeof v !== 'string') throw new Error('Не строка')\n}\n\nassertString(input)",
+        "options": [
+          "asserts можно писать только у методов классов",
+          "Стрелочная функция обязана возвращать boolean",
+          "У константы нет явной аннотации типа функции",
+          "input нужно сначала привести к unknown через as"
+        ],
+        "answer": 2,
+        "explanation": "Для вызова assertion-функции все имена в цели вызова должны иметь явную аннотацию типа: const assertString: (v: unknown) => asserts v is string = .... С объявлением через function такой проблемы нет."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Как задавали значения по умолчанию для defineProps<Props>() до Vue 3.5?",
+        "options": [
+          "defineProps<Props>({ size: 'md' })",
+          "defineProps<Props & { size: 'md' }>()",
+          "withDefaults(defineProps<Props>(), { size: 'md' })",
+          "Записать в interface Props: size?: 'sm' | 'md' = 'md'"
+        ],
+        "answer": 2,
+        "explanation": "Для объявления пропсов через тип дефолты задавали макросом withDefaults; в интерфейсе значения по умолчанию указать нельзя. С Vue 3.5 то же делается деструктуризацией: const { size = 'md' } = defineProps<Props>()."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Какой дженерик передать в useTemplateRef для ref на дочерний компонент TaskForm?",
+        "options": [
+          "typeof TaskForm",
+          "ReturnType<typeof TaskForm>",
+          "InstanceType<TaskForm>",
+          "InstanceType<typeof TaskForm>"
+        ],
+        "answer": 3,
+        "explanation": "Импорт TaskForm — это значение-конструктор компонента, а тип экземпляра получают через InstanceType<typeof TaskForm>. Снаружи будет доступно только то, что компонент передал в defineExpose."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Что скажет vue-tsc?",
+        "code": "const emit = defineEmits<{\n  select: [id: number]\n}>()\n\nfunction onRowClick(row: { id: string }) {\n  emit('select', row.id)\n}",
+        "options": [
+          "Ничего: типы событий проверяются только в рантайме",
+          "Ошибка: в select ожидается number, а передан string",
+          "Ошибка: emit нельзя вызывать внутри обычной функции",
+          "Ничего: emit приводит аргумент к number автоматически"
+        ],
+        "answer": 1,
+        "explanation": "В синтаксисе Vue 3.3+ каждое событие описано кортежем аргументов, и select: [id: number] требует число. Строковый id нужно преобразовать или исправить тип строки."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Как исправить деструктуризацию, сохранив реактивность и типы?",
+        "code": "const store = useTasksStore()\nconst { tasks, doneCount } = store\n// tasks и doneCount не обновляются после store.load()",
+        "options": [
+          "const { tasks, doneCount } = storeToRefs(store)",
+          "const { tasks, doneCount } = toRaw(store)",
+          "const { tasks, doneCount } = reactive(store)",
+          "const { tasks, doneCount } = shallowReactive(store)"
+        ],
+        "answer": 0,
+        "explanation": "Деструктуризация стора напрямую копирует текущие значения и рвёт реактивность. storeToRefs превращает state и getters в ref с сохранением типов, а actions берут из самого стора."
+      }
+    ]
+  ]
+}

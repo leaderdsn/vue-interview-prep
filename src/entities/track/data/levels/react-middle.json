@@ -1,1 +1,847 @@
-{"id":"react-middle","trackId":"react","level":"middle","topics":[{"title":"Как React рендерит: reconciliation, Fiber и причины перерисовки","html":"<p>На middle-собеседовании по React почти всегда звучит: «Что происходит, когда вызывают setState?» и «Почему этот компонент перерисовывается?». Ответ «React сравнивает виртуальный DOM» слишком общий. От вас ждут, что вы разделите рендер и коммит, назовёте настоящие причины перерисовки, объясните, как reconciliation сопоставляет элементы по типу и позиции, и в общих чертах — зачем React нужен Fiber. Для Vue-разработчика здесь главное отличие: React не отслеживает зависимости, он заново вызывает функцию компонента.</p>\n<h3>Три фазы: trigger, render, commit</h3>\n<p>Обновление проходит три шага. <b>Trigger</b> — что-то запросило обновление: первый <code>root.render()</code> или вызов сеттера состояния. <b>Render</b> — React вызывает функции компонентов и получает новое дерево элементов, затем сравнивает его с предыдущим. <b>Commit</b> — React применяет к DOM минимальный набор изменений, обновляет рефы и запускает эффекты: <code>useLayoutEffect</code> синхронно до отрисовки браузером, <code>useEffect</code> — после.</p>\n<figure class=\"figure\"><div class=\"flow\"><div class=\"step\"><b>Trigger</b><span>setCount(1) ставит обновление в очередь</span></div><div class=\"arrow\">→</div><div class=\"step hl\"><b>Render</b><span>вызов функций компонентов, сравнение деревьев</span></div><div class=\"arrow\">→</div><div class=\"step\"><b>Commit</b><span>изменения в DOM, рефы, layout-эффекты</span></div><div class=\"arrow\">→</div><div class=\"step good\"><b>Paint и эффекты</b><span>браузер рисует, затем выполняются useEffect</span></div></div><figcaption>Путь обновления от setState до экрана</figcaption></figure>\n<p>Важно: «компонент отрендерился» не значит «DOM изменился». Рендер — это вызов функции. Если результат совпал с прошлым, коммит для этого участка ничего не трогает. Поэтому лишний рендер стоит процессорного времени на вызов функции и сравнение, но не стоит операций с DOM.</p>\n<h3>Почему компонент перерисовывается</h3>\n<p>Причин всего несколько, и их стоит перечислять точно:</p>\n<ul><li><b>Изменилось его собственное состояние</b> — вызван сеттер <code>useState</code> или <code>dispatch</code> из <code>useReducer</code> с новым значением.</li><li><b>Перерисовался родитель</b> — по умолчанию React рендерит заново всех потомков, независимо от того, изменились ли их пропсы.</li><li><b>Изменилось значение контекста</b>, который компонент читает через <code>useContext</code> или <code>use</code>.</li><li><b>Изменился внешний стор</b>, на который компонент подписан через <code>useSyncExternalStore</code> (так работают Redux, Zustand и другие библиотеки).</li></ul>\n<p>«Изменились пропсы» в этом списке нет как самостоятельной причины: пропсы меняются только потому, что перерисовался родитель. Чтобы потомок пропускал рендер при тех же пропсах, его оборачивают в <code>memo</code> — это тема следующего раздела.</p>\n<div class=\"table-wrap\"><table><thead><tr><th></th><th>React</th><th>Vue 3</th></tr></thead><tbody><tr><td>Что перезапускается</td><td>вся функция компонента</td><td>только render-функция компонента с изменившимися зависимостями</td></tr><tr><td>Как узнаёт об изменении</td><td>явный вызов сеттера</td><td>реактивные прокси отслеживают чтения</td></tr><tr><td>Потомки</td><td>рендерятся вместе с родителем</td><td>обновляются, только если изменились их пропсы</td></tr><tr><td>Оптимизация</td><td>memo, useMemo или React Compiler</td><td>обычно не нужна, точность даёт реактивность</td></tr></tbody></table></div>\n<p>Если сеттер получил то же значение (сравнение через <code>Object.is</code>), React пропускает обновление. Он может один раз вызвать сам компонент, прежде чем убедиться, что ничего не изменилось, но дальше по дереву не пойдёт. Отсюда правило неизменяемости: мутированный объект — это та же ссылка, и обновления не будет.</p>\n<h3>Reconciliation: тип, позиция, key</h3>\n<p>Сравнивая два дерева, React не ищет оптимальное соответствие — это было бы слишком дорого. Он использует две эвристики. Первая: <b>элементы разного типа дают разные деревья</b>. Если на месте <code>&lt;div&gt;</code> стал <code>&lt;section&gt;</code> или <code>&lt;Profile&gt;</code> сменился на <code>&lt;Settings&gt;</code>, старое поддерево размонтируется вместе со всем состоянием, новое монтируется с нуля. Вторая: <b>в списках элементы сопоставляются по <code>key</code></b>, а без ключа — по индексу.</p>\n<p>Состояние привязано не к функции компонента, а к его <b>позиции в дереве</b>. Один и тот же компонент на том же месте сохраняет состояние между рендерами, даже если рендерится из разных веток условия. Чтобы сбросить состояние принудительно, меняют <code>key</code>.</p>\n<div class=\"code-label\">ChatPage.jsx</div><pre class=\"code\">function ChatPage({ contactId }) {\n  <span class=\"c\">// новый key при смене контакта — Chat монтируется заново,</span>\n  <span class=\"c\">// черновик сообщения из прошлого чата не «переезжает»</span>\n  return &lt;Chat key={contactId} contactId={contactId} /&gt;\n}\n\nfunction Form({ isAdmin }) {\n  <span class=\"c\">// тот же тип на той же позиции: состояние Input сохранится</span>\n  return isAdmin ? &lt;Input placeholder=\"admin\" /&gt; : &lt;Input placeholder=\"user\" /&gt;\n}</pre>\n<div class=\"note warn\">Ловушка: не объявляйте компонент внутри другого компонента. При каждом рендере родителя создаётся новая функция, то есть новый тип, и React размонтирует и смонтирует потомка заново: теряется состояние, сбрасывается фокус в полях, повторно срабатывают эффекты. Компоненты объявляют на верхнем уровне модуля.</div>\n<div class=\"code-label\">Плохо: новый тип на каждый рендер</div><pre class=\"code\">function Parent() {\n  const [text, setText] = useState('')\n  function Field() { <span class=\"c\">// при каждом вводе — новый компонент</span>\n    return &lt;input value={text} onChange={(e) =&gt; setText(e.target.value)} /&gt;\n  }\n  return &lt;Field /&gt; <span class=\"c\">// поле теряет фокус после каждого символа</span>\n}</pre>\n<h3>Fiber: зачем React переписали</h3>\n<p>Fiber — внутренняя архитектура React начиная с 16-й версии. Каждый компонент и элемент представлен объектом-«волокном» (fiber) со ссылками на родителя, первого потомка и соседа, а также с состоянием хуков и очередью обновлений. Раньше рендер шёл рекурсией по стеку вызовов и не мог прерваться. Fiber превращает его в цикл по связному списку, который можно поставить на паузу, продолжить или выбросить.</p>\n<ul><li><b>Две версии дерева.</b> Current — то, что сейчас на экране; work-in-progress — то, что строится в рендере. После коммита они меняются ролями (double buffering).</li><li><b>Рендер прерываемый, коммит — нет.</b> В конкурентных обновлениях (transitions) React может отдать управление браузеру между компонентами. Коммит всегда синхронный, чтобы пользователь не увидел наполовину обновлённый DOM.</li><li><b>Приоритеты.</b> Ввод в поле обрабатывается раньше, чем фоновое обновление списка. Подробно это разбирается на senior-уровне.</li></ul>\n<div class=\"note warn\">Ловушка: раз рендер можно прервать и повторить, функция компонента должна быть чистой: без запросов, подписок и мутации внешних переменных. Именно поэтому <code>&lt;StrictMode&gt;</code> в режиме разработки вызывает компоненты дважды — так проявляются побочные эффекты в рендере. В продакшене двойного вызова нет.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Обновление идёт в три фазы: trigger, render и commit. Рендер — это вызов функций компонентов и сравнение нового дерева со старым, коммит — точечные изменения DOM и запуск эффектов. Компонент перерисовывается из-за своего состояния, рендера родителя, смены контекста или внешнего стора; сами по себе пропсы не причина. Reconciliation сопоставляет элементы по типу и позиции, а в списках по key: сменился тип — поддерево монтируется заново, и состояние теряется. Fiber делает рендер прерываемым, поэтому компоненты должны быть чистыми функциями.»</div>"},{"title":"Мемоизация: memo, useMemo, useCallback и React Compiler","html":"<p>Вопросы о мемоизации — классика middle-собеседования: «Когда нужен useMemo?», «Почему memo не помогает?», «Чем useCallback отличается от useMemo?». В 2026 году к ним добавился ещё один: «Вы используете React Compiler и что он меняет?». Хороший ответ показывает, что вы понимаете, что именно сравнивается и где мемоизация ломается, а не расставляете хуки «на всякий случай».</p>\n<h3>memo: пропуск рендера при тех же пропсах</h3>\n<p><code>memo(Component)</code> возвращает компонент, который при рендере родителя сначала поверхностно сравнивает новые пропсы со старыми через <code>Object.is</code> по каждому ключу. Если все совпали, рендер пропускается и используется прошлый результат. Свои состояние и контекст по-прежнему вызывают перерисовку — memo влияет только на причину «перерисовался родитель».</p>\n<div class=\"code-label\">ProductList.jsx</div><pre class=\"code\">const Row = memo(function Row({ item, onSelect }) {\n  return &lt;li onClick={() =&gt; onSelect(item.id)}&gt;{item.title}&lt;/li&gt;\n})\n\nfunction ProductList({ items }) {\n  const [query, setQuery] = useState('')\n  <span class=\"c\">// новая функция на каждый рендер — memo у Row бесполезен</span>\n  const onSelect = (id) =&gt; console.log(id)\n  return items.map((item) =&gt; &lt;Row key={item.id} item={item} onSelect={onSelect} /&gt;)\n}</pre>\n<p>Поверхностное сравнение ломается на всём, что создаётся заново в каждом рендере: литералы объектов и массивов (<code>style={{ color: \"red\" }}</code>), стрелочные функции и JSX, переданный через <code>children</code>. Ссылка новая — значит, пропс «изменился».</p>\n<h3>useMemo и useCallback</h3>\n<p><code>useMemo(fn, deps)</code> вызывает <code>fn</code> и запоминает результат до тех пор, пока зависимости не изменятся (каждая сравнивается через <code>Object.is</code>). <code>useCallback(fn, deps)</code> запоминает саму функцию, а не результат её вызова: по сути это <code>useMemo(() =&gt; fn, deps)</code>.</p>\n<div class=\"table-wrap\"><table><thead><tr><th>Инструмент</th><th>Что кэширует</th><th>Когда оправдан</th></tr></thead><tbody><tr><td><code>memo</code></td><td>результат рендера компонента</td><td>компонент тяжёлый и часто рендерится с теми же пропсами</td></tr><tr><td><code>useMemo</code></td><td>значение</td><td>дорогое вычисление или стабильная ссылка для memo-потомка и зависимостей эффекта</td></tr><tr><td><code>useCallback</code></td><td>функцию</td><td>функция уходит в memo-компонент или в зависимости эффекта</td></tr></tbody></table></div>\n<div class=\"code-label\">ProductList.jsx — исправлено</div><pre class=\"code\">function ProductList({ items }) {\n  const [query, setQuery] = useState('')\n  const visible = useMemo(\n    () =&gt; items.filter((i) =&gt; i.title.includes(query)),\n    [items, query],\n  )\n  const onSelect = useCallback((id) =&gt; console.log(id), [])\n  return visible.map((item) =&gt; &lt;Row key={item.id} item={item} onSelect={onSelect} /&gt;)\n}</pre>\n<p>Мемоизация имеет цену: сравнение зависимостей на каждом рендере, память под кэш, более сложный код. Сам по себе <code>useCallback</code> без memo-потомка или эффекта ничего не ускоряет — функция всё равно создаётся при каждом рендере, просто React возвращает старую.</p>\n<div class=\"note warn\">Ловушка: зависимость, которая создаётся в рендере, обнуляет мемоизацию. <code>useMemo(() =&gt; compute(options), [options])</code>, где <code>options = { sort: \"asc\" }</code> объявлен в теле компонента, пересчитывается каждый раз. Выносите константы за пределы компонента или мемоизируйте саму зависимость.</div>\n<p>Есть и обратный приём, который часто лучше мемоизации: <b>опустить состояние вниз</b> или <b>передать тяжёлую часть через children</b>. Если быстро меняющееся состояние живёт в маленьком компоненте, а дорогое поддерево пришло к нему как <code>children</code>, то при обновлении состояния элементы <code>children</code> — те же объекты, созданные родителем, и React их не перерисовывает.</p>\n<h3>React Compiler: мемоизация на этапе сборки</h3>\n<p>React Compiler 1.0 вышел стабильным в октябре 2025 года. Это плагин сборки (<code>babel-plugin-react-compiler</code>), который анализирует компоненты и хуки и сам добавляет мемоизацию: кэширует вычисления, функции и JSX-элементы, причём точнее, чем вручную, — вплоть до отдельных значений внутри компонента и с учётом условных веток. Он работает с React 19, а для React 17 и 18 есть пакет <code>react-compiler-runtime</code>.</p>\n<div class=\"code-label\">vite.config.ts</div><pre class=\"code\">import react from '@vitejs/plugin-react'\n\nexport default defineConfig({\n  plugins: [\n    react({\n      babel: { plugins: ['babel-plugin-react-compiler'] }, <span class=\"c\">// компилятор первым в списке</span>\n    }),\n  ],\n})</pre>\n<p>В Next.js компилятор включается опцией <code>reactCompiler: true</code> в <code>next.config</code>. После включения большинство ручных <code>memo</code>, <code>useMemo</code> и <code>useCallback</code> становятся не нужны в новом коде. Существующие можно не удалять: компилятор с ними совместим. Ручные хуки остаются как «ручной рычаг» там, где нужна точная гарантия стабильной ссылки, например для зависимостей эффекта.</p>\n<figure class=\"figure\"><div class=\"flow\"><div class=\"step\"><b>Исходный код</b><span>обычный компонент без хуков мемоизации</span></div><div class=\"arrow\">→</div><div class=\"step hl\"><b>Анализ</b><span>проверка правил React, поиск зависимостей значений</span></div><div class=\"arrow\">→</div><div class=\"step good\"><b>Результат</b><span>кэш вычислений, колбэков и JSX по зависимостям</span></div><div class=\"arrow\">→</div><div class=\"step bad\"><b>Нарушение правил</b><span>компонент пропускается и работает как раньше</span></div></div><figcaption>Что делает компилятор с компонентом</figcaption></figure>\n<p>Компилятор опирается на <b>правила React</b>: компоненты и хуки чистые, пропсы и состояние не мутируются, хуки вызываются безусловно на верхнем уровне. Если он находит нарушение, то не ломает код, а просто не оптимизирует этот компонент. Нарушения показывает <code>eslint-plugin-react-hooks</code>: в актуальной версии правила компилятора входят в рекомендуемый набор. Отключить компиляцию для конкретного компонента можно директивой <code>'use no memo'</code> в начале функции.</p>\n<div class=\"note warn\">Ловушка: компилятор не спасает от мутаций. Если код меняет объект из пропсов или состояния на месте, закэшированный JSX не обновится, потому что ссылка та же. Код, который «работал» без компилятора благодаря лишним рендерам, после включения может начать показывать устаревшие данные — это сигнал исправить мутацию, а не отключать компилятор.</div>\n<div class=\"boxes\"><div class=\"box good\"><b>Так</b><span>Включить компилятор, писать чистые компоненты, исправлять предупреждения линтера. Ручную мемоизацию оставлять точечно — там, где нужна гарантия стабильной ссылки.</span></div><div class=\"box bad\"><b>Не так</b><span>Оборачивать каждую функцию в useCallback и каждый компонент в memo без замеров или отключать компилятор, вместо того чтобы найти мутацию.</span></div></div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«memo пропускает рендер компонента, если пропсы поверхностно равны, useMemo кэширует значение, useCallback — функцию. Всё это сравнивает ссылки, поэтому ломается на объектах и функциях, созданных в рендере, и на JSX в children. Мемоизация стоит памяти и сравнений, так что без замеров я её не расставляю, а сначала пробую опустить состояние вниз. В новых проектах включаю React Compiler 1.0: он мемоизирует автоматически и точнее, но требует соблюдать правила React — чистые компоненты и никаких мутаций.»</div>"},{"title":"Свои хуки, Context и useReducer","html":"<p>Блок про переиспользование логики и общее состояние на собеседовании обычно открывают вопросом: «Как вынести логику из компонента?». Затем идут «Когда выбрать Context, а когда стор?» и «Зачем useReducer, если есть useState?». Vue-разработчику здесь многое знакомо: свои хуки похожи на composables, а Context — на <code>provide/inject</code>. Но есть важные отличия, и на них часто ловят.</p>\n<h3>Свои хуки: общая логика, не общее состояние</h3>\n<p>Свой хук — это функция с именем на <code>use</code>, внутри которой вызываются другие хуки. Префикс нужен не для красоты: по нему линтер и React Compiler понимают, что к функции применяются правила хуков. Каждый вызов хука получает <b>своё</b> состояние: два компонента с <code>useOnlineStatus()</code> не делят одну переменную, а подписываются независимо.</p>\n<div class=\"code-label\">useDebouncedValue.js</div><pre class=\"code\">export function useDebouncedValue(value, delay = 300) {\n  const [debounced, setDebounced] = useState(value)\n  useEffect(() =&gt; {\n    const id = setTimeout(() =&gt; setDebounced(value), delay)\n    return () =&gt; clearTimeout(id) <span class=\"c\">// очистка при смене value или размонтировании</span>\n  }, [value, delay])\n  return debounced\n}\n\n<span class=\"c\">// в компоненте</span>\nconst query = useDebouncedValue(input, 500)</pre>\n<p>Правила хуков: вызывать только на верхнем уровне компонента или другого хука, не внутри условий, циклов и обработчиков событий. React связывает хуки с ячейками состояния по <b>порядку вызова</b>, поэтому порядок должен быть одинаковым в каждом рендере. Исключение — <code>use</code>: его можно вызывать в условиях и циклах.</p>\n<div class=\"table-wrap\"><table><thead><tr><th></th><th>Свой хук React</th><th>Composable Vue</th></tr></thead><tbody><tr><td>Сколько раз выполняется</td><td>при каждом рендере компонента</td><td>один раз в setup</td></tr><tr><td>Где можно вызывать</td><td>только на верхнем уровне, без условий</td><td>где угодно в setup, порядок не важен</td></tr><tr><td>Общее состояние</td><td>нет, каждый вызов — своё</td><td>есть, если ref объявлен вне функции</td></tr><tr><td>Устаревшие замыкания</td><td>реальная проблема, нужны зависимости</td><td>нет, ref всегда актуален</td></tr></tbody></table></div>\n<div class=\"note warn\">Ловушка: не называйте <code>use…</code> обычную функцию без хуков и не прячьте хук под другим именем. В первом случае на неё зря распространятся ограничения, во втором линтер не заметит вызов хука в условии, и порядок хуков сломается.</div>\n<h3>Context: передача без prop drilling</h3>\n<p>Context передаёт значение вниз по дереву любому потомку, минуя промежуточные компоненты. В React 19 сам контекст можно рендерить как провайдер: <code>&lt;ThemeContext value={...}&gt;</code>. Запись <code>&lt;ThemeContext.Provider&gt;</code> пока работает, но в будущих версиях её объявят устаревшей. Читают значение через <code>useContext(Ctx)</code> или <code>use(Ctx)</code> — последний можно вызвать и после раннего <code>return</code> или внутри условия.</p>\n<div class=\"code-label\">AuthProvider.jsx</div><pre class=\"code\">const AuthContext = createContext(null)\n\nexport function AuthProvider({ children }) {\n  const [user, setUser] = useState(null)\n  <span class=\"c\">// без useMemo value — новый объект на каждый рендер провайдера</span>\n  const value = useMemo(() =&gt; ({ user, login: setUser }), [user])\n  return &lt;AuthContext value={value}&gt;{children}&lt;/AuthContext&gt;\n}\n\nexport function useAuth() {\n  const ctx = useContext(AuthContext)\n  if (!ctx) throw new Error('useAuth вне AuthProvider')\n  return ctx\n}</pre>\n<p>Главное, что нужно знать про производительность: <b>когда значение контекста меняется (по <code>Object.is</code>), перерисовываются все компоненты, которые его читают</b>, и <code>memo</code> у промежуточных компонентов этому не мешает. Компонент нельзя подписать на часть значения: если в контексте лежат и тема, и пользователь, смена темы перерисует всех, кому нужен только пользователь.</p>\n<ul><li>Мемоизируйте объект <code>value</code>, иначе любой рендер провайдера обновит всех потребителей (с React Compiler это происходит автоматически).</li><li>Разделяйте контексты по частоте изменений: тема отдельно, пользователь отдельно.</li><li>Выносите стабильные функции в отдельный контекст от данных — например, <code>dispatch</code> отдельно от <code>state</code>.</li></ul>\n<div class=\"note\">Context — это механизм передачи, а не стейт-менеджер. Для редко меняющихся данных (тема, локаль, текущий пользователь) он идеален. Для часто обновляемого глобального состояния с подпиской на часть данных лучше подходят Zustand, Redux Toolkit или MobX — их разбирают в отдельных направлениях.</div>\n<h3>useReducer: логика обновлений в одном месте</h3>\n<p><code>useReducer(reducer, initialState)</code> возвращает <code>[state, dispatch]</code>. Редьюсер — чистая функция <code>(state, action) =&gt; newState</code>: он не мутирует состояние, а возвращает новое. Это удобно, когда следующее состояние зависит от предыдущего сразу в нескольких полях, когда переходов много или когда логику хочется протестировать отдельно от компонента.</p>\n<div class=\"code-label\">cartReducer.js</div><pre class=\"code\">function cartReducer(state, action) {\n  switch (action.type) {\n    case 'added':\n      return { ...state, items: [...state.items, action.item] }\n    case 'removed':\n      return { ...state, items: state.items.filter((i) =&gt; i.id !== action.id) }\n    default:\n      throw new Error('Неизвестное действие ' + action.type)\n  }\n}\n\nconst [cart, dispatch] = useReducer(cartReducer, { items: [] })\ndispatch({ type: 'added', item })</pre>\n<p>У <code>dispatch</code> стабильная ссылка на всё время жизни компонента. Поэтому связка «<code>useReducer</code> + два контекста (состояние и dispatch)» — стандартный способ дать глубоким потомкам менять общее состояние: компоненты, которым нужен только <code>dispatch</code>, не перерисуются при изменении данных.</p>\n<div class=\"note warn\">Ловушка: мутировать <code>state</code> в редьюсере и возвращать его же — например, <code>state.items.push(item); return state</code>. Ссылка не изменилась, <code>Object.is</code> вернёт true, и React пропустит обновление. Для глубоко вложенных структур используют spread или библиотеку Immer.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Свой хук — это функция на use, которая выносит логику с хуками; каждый вызов получает своё состояние, в отличие от composable с ref вне функции. Хуки вызываются на верхнем уровне, потому что React связывает их по порядку. Context решает prop drilling, но при смене значения перерисовывает всех потребителей, поэтому я мемоизирую value и разделяю контексты по частоте изменений. useReducer беру, когда переходов состояния много: логика в чистой функции, а стабильный dispatch удобно отдать вниз через отдельный контекст.»</div>"},{"title":"Данные и формы в React 19: Suspense, use, actions, useOptimistic","html":"<p>React 19 заметно изменил то, как в компонентах загружают данные и отправляют формы, и на собеседовании это проверяют: «Как работает Suspense?», «Что делает хук use?», «Что такое actions и чем useActionState лучше ручного isLoading?», «Как сделать оптимистичное обновление?». Middle-кандидат должен уметь написать форму на actions и объяснить, почему загрузка данных в <code>useEffect</code> больше не лучший вариант.</p>\n<h3>Suspense и хук use</h3>\n<p><code>&lt;Suspense fallback={...}&gt;</code> показывает запасной UI, пока какой-то компонент внутри «приостановлен» — ждёт код (<code>lazy</code>) или данные. В React 19 читать данные с приостановкой умеет хук <code>use(promise)</code>: если промис ещё не выполнен, компонент приостанавливается и ближайший Suspense показывает fallback; когда промис выполнится, React отрендерит компонент со значением. Если промис отклонён, ошибку получит ближайший Error Boundary.</p>\n<div class=\"code-label\">Comments.jsx</div><pre class=\"code\">function Comments({ commentsPromise }) {\n  const comments = use(commentsPromise) <span class=\"c\">// приостановка до выполнения промиса</span>\n  return comments.map((c) =&gt; &lt;p key={c.id}&gt;{c.text}&lt;/p&gt;)\n}\n\nfunction Post({ commentsPromise }) {\n  return (\n    &lt;Suspense fallback={&lt;Spinner /&gt;}&gt;\n      &lt;Comments commentsPromise={commentsPromise} /&gt;\n    &lt;/Suspense&gt;\n  )\n}</pre>\n<div class=\"note warn\">Ловушка: создавать промис прямо в рендере клиентского компонента — <code>use(fetch(url))</code>. На каждом рендере получится новый промис, компонент снова приостановится, и загрузка зациклится. Промис должен быть стабильным: его создаёт серверный компонент, роутер, библиотека с кэшем (например, <code>useSuspenseQuery</code> в TanStack Query) или код вне рендера.</div>\n<p>Чем это лучше <code>useEffect</code> с <code>fetch</code>? Эффект запускается только после первого рендера и коммита, поэтому загрузка начинается поздно и легко выстраивается «водопадом»: родитель загрузил данные, отрендерил потомка, тот начал свою загрузку. К тому же вручную нужно обрабатывать гонки ответов и состояние загрузки в каждом компоненте. С Suspense состояния загрузки описываются декларативно — границами в дереве.</p>\n<p>Ещё одно важное поведение: если обновление идёт внутри transition (например, переход роутера), React <b>не заменяет на fallback уже показанный контент</b>, а оставляет старый экран, пока новый не будет готов. Без transition уже видимая граница снова покажет спиннер.</p>\n<h3>Actions: асинхронные переходы и формы</h3>\n<p>Action — это функция, запускающая переход, в том числе асинхронная. В React 19 <code>startTransition</code> из <code>useTransition</code> принимает async-функцию, а <code>isPending</code> остаётся true, пока она выполняется. У <code>&lt;form&gt;</code> появился проп <code>action</code>: в него можно передать функцию, которая получит <code>FormData</code>. После успешного выполнения React сам сбросит неуправляемые поля формы.</p>\n<p>Для типичной формы есть <code>useActionState(action, initialState)</code>. Он возвращает <code>[state, formAction, isPending]</code>, а сама action получает предыдущее состояние и данные формы — так удобно возвращать ошибки валидации или ответ сервера.</p>\n<div class=\"code-label\">SubscribeForm.jsx</div><pre class=\"code\">async function subscribe(prevState, formData) {\n  const email = formData.get('email')\n  const res = await api.subscribe(email)\n  if (!res.ok) return { error: 'Не удалось подписаться' }\n  return { error: null }\n}\n\nfunction SubmitButton() {\n  const { pending } = useFormStatus() <span class=\"c\">// статус родительской формы</span>\n  return &lt;button disabled={pending}&gt;{pending ? 'Отправка…' : 'Подписаться'}&lt;/button&gt;\n}\n\nexport function SubscribeForm() {\n  const [state, formAction, isPending] = useActionState(subscribe, { error: null })\n  return (\n    &lt;form action={formAction}&gt;\n      &lt;input name=\"email\" type=\"email\" required /&gt;\n      &lt;SubmitButton /&gt;\n      {state.error &amp;&amp; &lt;p role=\"alert\"&gt;{state.error}&lt;/p&gt;}\n    &lt;/form&gt;\n  )\n}</pre>\n<p><code>useFormStatus</code> из <code>react-dom</code> возвращает <code>pending</code>, <code>data</code>, <code>method</code> и <code>action</code> отправляемой формы — без пропсов и контекста. Это удобно для кнопок дизайн-системы, которые используются во многих формах.</p>\n<div class=\"note warn\">Ловушка: <code>useFormStatus</code> видит только форму, внутри которой отрендерен компонент. Если вызвать его в том же компоненте, где написан <code>&lt;form&gt;</code>, <code>pending</code> всегда будет false. Кнопку выносят в отдельный компонент, как <code>SubmitButton</code> выше.</div>\n<div class=\"table-wrap\"><table><thead><tr><th>Хук</th><th>Что возвращает</th><th>Для чего</th></tr></thead><tbody><tr><td><code>useTransition</code></td><td><code>[isPending, startTransition]</code></td><td>любой async-переход с флагом ожидания</td></tr><tr><td><code>useActionState</code></td><td><code>[state, formAction, isPending]</code></td><td>форма с результатом и ошибками action</td></tr><tr><td><code>useFormStatus</code></td><td><code>{ pending, data, method, action }</code></td><td>статус родительской формы в дочернем компоненте</td></tr><tr><td><code>useOptimistic</code></td><td><code>[optimisticState, addOptimistic]</code></td><td>временное состояние, пока action выполняется</td></tr></tbody></table></div>\n<h3>useOptimistic: интерфейс не ждёт сервер</h3>\n<p><code>useOptimistic(state, updateFn)</code> возвращает копию состояния, которую можно временно изменить на время action. Пользователь сразу видит результат, например новое сообщение в чате. Когда action завершится, оптимистичное значение отбрасывается и React показывает настоящее <code>state</code>: при успехе там уже будут данные с сервера, при ошибке — прежнее значение, то есть откат происходит сам.</p>\n<div class=\"code-label\">Thread.jsx</div><pre class=\"code\">function Thread({ messages, sendMessage }) {\n  const [optimistic, addOptimistic] = useOptimistic(\n    messages,\n    (current, text) =&gt; [...current, { id: 'temp', text, sending: true }],\n  )\n\n  async function formAction(formData) {\n    const text = formData.get('text')\n    addOptimistic(text) <span class=\"c\">// вызывается внутри action</span>\n    await sendMessage(text) <span class=\"c\">// родитель обновит messages после ответа</span>\n  }\n\n  return (\n    &lt;form action={formAction}&gt;\n      {optimistic.map((m) =&gt; &lt;p key={m.id}&gt;{m.text}{m.sending &amp;&amp; ' (отправка…)'}&lt;/p&gt;)}\n      &lt;input name=\"text\" /&gt;\n    &lt;/form&gt;\n  )\n}</pre>\n<figure class=\"figure\"><div class=\"flow\"><div class=\"step\"><b>Submit</b><span>форма вызывает action</span></div><div class=\"arrow\">→</div><div class=\"step hl\"><b>addOptimistic</b><span>сообщение сразу в списке с пометкой</span></div><div class=\"arrow\">→</div><div class=\"step\"><b>Запрос</b><span>await sendMessage(text)</span></div><div class=\"arrow\">→</div><div class=\"step good\"><b>Готово</b><span>оптимистичное значение заменяется настоящим state</span></div></div><figcaption>Жизненный цикл оптимистичного обновления</figcaption></figure>\n<div class=\"note\">Для сравнения: во Vue похожие сценарии решают вручную — флаг загрузки в <code>ref</code>, try/catch, откат значения. Экспериментальный <code>&lt;Suspense&gt;</code> во Vue тоже есть, но для форм аналогов actions в ядре нет.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«В React 19 загрузку данных описываю через Suspense: компонент читает стабильный промис хуком use, а ближайшая граница показывает fallback, ошибка уходит в Error Boundary. Промис не создаю в рендере — его даёт роутер, сервер или библиотека с кэшем. Формы пишу на actions: useActionState даёт результат action и isPending, useFormStatus — статус формы в дочерней кнопке, а useOptimistic показывает изменение сразу и сам откатывает его, когда action завершилась.»</div>"}],"quiz":[{"topic":0,"type":"theory","question":"Какое из событий само по себе НЕ является причиной перерисовки компонента без memo?","options":["Вызов сеттера useState с новым значением","Изменение пропсов без перерисовки родителя","Перерисовка родительского компонента","Смена значения контекста, который он читает"],"answer":1,"explanation":"Пропсы меняются только потому, что перерисовался родитель — это и есть причина. Компонент рендерится из-за своего состояния, рендера родителя, контекста или подписки на внешний стор."},{"topic":0,"type":"practice","question":"Поле ввода теряет фокус после каждого введённого символа. В чём причина?","code":"function Parent() {\n  const [text, setText] = useState('')\n  function Field() {\n    return <input value={text} onChange={(e) => setText(e.target.value)} />\n  }\n  return <Field />\n}","options":["Поле управляемое, а у управляемых полей React всегда сбрасывает фокус","Не хватает key у input, поэтому React не может его сопоставить","setText вызывается синхронно, нужно обернуть его в startTransition","Field объявлен внутри компонента, и в каждом рендере это новый тип"],"answer":3,"explanation":"Компонент, объявленный внутри другого, при каждом рендере — новая функция, то есть новый тип. Reconciliation размонтирует старое поддерево и монтирует новое, поэтому DOM-узел input пересоздаётся и фокус теряется."},{"topic":0,"type":"theory","question":"Какую возможность даёт архитектура Fiber?","options":["Прерывать, откладывать и возобновлять рендер, сохраняя коммит синхронным","Отслеживать зависимости компонента, как реактивность Vue, без повторного вызова функции","Применять изменения к DOM частями, чтобы коммит не блокировал браузер","Выполнять функции компонентов в Web Worker, параллельно с основным потоком"],"answer":0,"explanation":"Fiber превращает рендер в цикл по связному списку волокон, который можно прервать и продолжить. Коммит при этом всегда синхронный, чтобы пользователь не увидел частично обновлённый DOM."},{"topic":1,"type":"practice","question":"Row обёрнут в memo, но всё равно рендерится при каждом вводе в поле поиска. Почему?","code":"const Row = memo(function Row({ item, onSelect }) { /* ... */ })\n\nfunction List({ items }) {\n  const [query, setQuery] = useState('')\n  const onSelect = (id) => console.log(id)\n  return items.map((item) => <Row key={item.id} item={item} onSelect={onSelect} />)\n}","options":["memo работает только с классовыми компонентами, а Row — функция","key у Row меняется при каждом рендере списка","onSelect — каждый раз новая функция, и memo видит новый проп","memo сравнивает пропсы глубоко, а item — вложенный объект"],"answer":2,"explanation":"memo сравнивает каждый пропс через Object.is. Стрелочная функция, созданная в рендере, каждый раз новая ссылка. Нужен useCallback или React Compiler, который сделает это автоматически."},{"topic":1,"type":"theory","question":"Как ведёт себя React Compiler, если находит в компоненте нарушение правил React?","options":["Пропускает оптимизацию этого компонента, и он работает как без компилятора","Останавливает сборку с ошибкой, пока нарушение не исправят","Переписывает код компонента так, чтобы мутация стала неизменяемым обновлением","Оборачивает компонент в memo, но не мемоизирует значения внутри него"],"answer":0,"explanation":"Компилятор консервативен: при нарушении правил он не трогает компонент. Сами нарушения показывает eslint-plugin-react-hooks, а отключить компиляцию вручную можно директивой 'use no memo'."},{"topic":1,"type":"practice","question":"Почему этот useMemo пересчитывает список на каждом рендере?","code":"function Table({ rows }) {\n  const options = { sort: 'asc' }\n  const sorted = useMemo(() => sortRows(rows, options), [rows, options])\n  return <Grid rows={sorted} />\n}","options":["useMemo не кэширует результат, если функция возвращает массив","options создаётся заново в каждом рендере, и зависимость всегда «новая»","Зависимости сравниваются глубоко, а rows — большой массив","useMemo пересчитывается всегда, он только откладывает вычисление"],"answer":1,"explanation":"Каждая зависимость сравнивается через Object.is. Объект, объявленный в теле компонента, — новая ссылка на каждом рендере. Константу выносят за пределы компонента или мемоизируют."},{"topic":2,"type":"theory","question":"Два компонента вызывают один и тот же свой хук useCounter(). Что верно про их состояние?","options":["Состояние общее, потому что хук объявлен в одном модуле","Состояние общее, только если оба компонента внутри одного провайдера","Второй вызов вернёт состояние первого, пока тот смонтирован","У каждого вызова своё независимое состояние"],"answer":3,"explanation":"Свой хук переиспользует логику, а не состояние: useState внутри него создаёт ячейку для каждого компонента отдельно. Для общего состояния нужен Context, поднятие состояния или стор."},{"topic":2,"type":"practice","question":"В контексте лежат тема и пользователь. При смене темы перерисовывается UserBadge, который читает только user, хотя он обёрнут в memo. Что поможет?","code":"<AppContext value={{ theme, user }}>\n  <Layout />\n</AppContext>\n\nconst UserBadge = memo(() => {\n  const { user } = useContext(AppContext)\n  return <span>{user.name}</span>\n})","options":["Заменить useContext на use — он подписывается только на нужные поля","Обернуть Layout в memo, чтобы остановить обновление контекста","Разделить на ThemeContext и UserContext","Передать в memo функцию сравнения пропсов"],"answer":2,"explanation":"При смене значения контекста перерисовываются все его потребители, и memo этому не мешает. Подписаться на часть значения нельзя, поэтому контексты разделяют по частоте изменений."},{"topic":2,"type":"practice","question":"После dispatch({ type: \"added\", item }) список на экране не обновляется. В чём ошибка?","code":"function reducer(state, action) {\n  switch (action.type) {\n    case 'added':\n      state.items.push(action.item)\n      return state\n  }\n}","options":["dispatch асинхронный, нужно дождаться его через await","Редьюсер возвращает ту же ссылку на state, и React пропускает рендер","В switch нет default, поэтому редьюсер возвращает undefined","useReducer не поддерживает массивы в состоянии, для списков нужен useState"],"answer":1,"explanation":"Редьюсер должен возвращать новый объект. Мутация и возврат того же state дают Object.is === true, и React пропускает рендер. Правильно: { ...state, items: [...state.items, action.item] }."},{"topic":3,"type":"practice","question":"Кнопка всегда активна, хотя форма отправляется несколько секунд. Почему pending всегда false?","code":"function Form() {\n  const { pending } = useFormStatus()\n  return (\n    <form action={save}>\n      <button disabled={pending}>Сохранить</button>\n    </form>\n  )\n}","options":["useFormStatus вызван не внутри формы, а в компоненте, который её рендерит","save должна быть объявлена через useActionState, иначе pending не работает","useFormStatus работает только в серверных компонентах","У формы не указан method=\"post\", поэтому статус не отслеживается"],"answer":0,"explanation":"useFormStatus возвращает статус формы, внутри которой отрендерен компонент. Кнопку нужно вынести в отдельный компонент и разместить её внутри form."},{"topic":3,"type":"theory","question":"Что произойдёт с оптимистичным значением из useOptimistic, если запрос внутри action завершился ошибкой?","options":["Оно останется на экране, пока его не удалят вручную","React повторит action, пока запрос не завершится успешно","Компонент приостановится, и ближайший Suspense покажет fallback","Когда action завершится, React покажет настоящий state, то есть прежнее значение"],"answer":3,"explanation":"Оптимистичное значение живёт только пока выполняется action. После её завершения React возвращается к переданному state: при ошибке он не изменился, и откат происходит сам."},{"topic":3,"type":"practice","question":"Компонент бесконечно показывает спиннер и снова и снова отправляет запрос. Как это исправить?","code":"function Profile({ id }) {\n  const user = use(fetch('/api/users/' + id).then((r) => r.json()))\n  return <h1>{user.name}</h1>\n}","options":["Заменить use на useContext, он умеет читать промисы","Убрать Suspense вокруг Profile, тогда use дождётся промиса","Получать стабильный промис извне рендера: из пропсов, роутера или библиотеки с кэшем","Вызвать use внутри useEffect, чтобы запрос шёл после коммита"],"answer":2,"explanation":"В каждом рендере создаётся новый промис, поэтому компонент снова приостанавливается. use ожидает стабильный промис, созданный вне рендера клиентского компонента. Вызывать хуки внутри useEffect нельзя."}]}
+{
+  "id": "react-middle",
+  "trackId": "react",
+  "level": "middle",
+  "topics": [
+    {
+      "title": "Как React рендерит: reconciliation, Fiber и причины перерисовки",
+      "html": "<p>На middle-собеседовании по React почти всегда звучит: «Что происходит, когда вызывают setState?» и «Почему этот компонент перерисовывается?». Ответ «React сравнивает виртуальный DOM» слишком общий. От вас ждут, что вы разделите рендер и коммит, назовёте настоящие причины перерисовки, объясните, как reconciliation сопоставляет элементы по типу и позиции, и в общих чертах — зачем React нужен Fiber. Для Vue-разработчика здесь главное отличие: React не отслеживает зависимости, он заново вызывает функцию компонента.</p>\n<h3>Три фазы: trigger, render, commit</h3>\n<p>Обновление проходит три шага. <b>Trigger</b> — что-то запросило обновление: первый <code>root.render()</code> или вызов сеттера состояния. <b>Render</b> — React вызывает функции компонентов и получает новое дерево элементов, затем сравнивает его с предыдущим. <b>Commit</b> — React применяет к DOM минимальный набор изменений, обновляет рефы и запускает эффекты: <code>useLayoutEffect</code> синхронно до отрисовки браузером, <code>useEffect</code> — после.</p>\n<figure class=\"figure\"><div class=\"flow\"><div class=\"step\"><b>Trigger</b><span>setCount(1) ставит обновление в очередь</span></div><div class=\"arrow\">→</div><div class=\"step hl\"><b>Render</b><span>вызов функций компонентов, сравнение деревьев</span></div><div class=\"arrow\">→</div><div class=\"step\"><b>Commit</b><span>изменения в DOM, рефы, layout-эффекты</span></div><div class=\"arrow\">→</div><div class=\"step good\"><b>Paint и эффекты</b><span>браузер рисует, затем выполняются useEffect</span></div></div><figcaption>Путь обновления от setState до экрана</figcaption></figure>\n<p>Важно: «компонент отрендерился» не значит «DOM изменился». Рендер — это вызов функции. Если результат совпал с прошлым, коммит для этого участка ничего не трогает. Поэтому лишний рендер стоит процессорного времени на вызов функции и сравнение, но не стоит операций с DOM.</p>\n<h3>Почему компонент перерисовывается</h3>\n<p>Причин всего несколько, и их стоит перечислять точно:</p>\n<ul><li><b>Изменилось его собственное состояние</b> — вызван сеттер <code>useState</code> или <code>dispatch</code> из <code>useReducer</code> с новым значением.</li><li><b>Перерисовался родитель</b> — по умолчанию React рендерит заново всех потомков, независимо от того, изменились ли их пропсы.</li><li><b>Изменилось значение контекста</b>, который компонент читает через <code>useContext</code> или <code>use</code>.</li><li><b>Изменился внешний стор</b>, на который компонент подписан через <code>useSyncExternalStore</code> (так работают Redux, Zustand и другие библиотеки).</li></ul>\n<p>«Изменились пропсы» в этом списке нет как самостоятельной причины: пропсы меняются только потому, что перерисовался родитель. Чтобы потомок пропускал рендер при тех же пропсах, его оборачивают в <code>memo</code> — это тема следующего раздела.</p>\n<div class=\"table-wrap\"><table><thead><tr><th></th><th>React</th><th>Vue 3</th></tr></thead><tbody><tr><td>Что перезапускается</td><td>вся функция компонента</td><td>только render-функция компонента с изменившимися зависимостями</td></tr><tr><td>Как узнаёт об изменении</td><td>явный вызов сеттера</td><td>реактивные прокси отслеживают чтения</td></tr><tr><td>Потомки</td><td>рендерятся вместе с родителем</td><td>обновляются, только если изменились их пропсы</td></tr><tr><td>Оптимизация</td><td>memo, useMemo или React Compiler</td><td>обычно не нужна, точность даёт реактивность</td></tr></tbody></table></div>\n<p>Если сеттер получил то же значение (сравнение через <code>Object.is</code>), React пропускает обновление. Он может один раз вызвать сам компонент, прежде чем убедиться, что ничего не изменилось, но дальше по дереву не пойдёт. Отсюда правило неизменяемости: мутированный объект — это та же ссылка, и обновления не будет.</p>\n<h3>Reconciliation: тип, позиция, key</h3>\n<p>Сравнивая два дерева, React не ищет оптимальное соответствие — это было бы слишком дорого. Он использует две эвристики. Первая: <b>элементы разного типа дают разные деревья</b>. Если на месте <code>&lt;div&gt;</code> стал <code>&lt;section&gt;</code> или <code>&lt;Profile&gt;</code> сменился на <code>&lt;Settings&gt;</code>, старое поддерево размонтируется вместе со всем состоянием, новое монтируется с нуля. Вторая: <b>в списках элементы сопоставляются по <code>key</code></b>, а без ключа — по индексу.</p>\n<p>Состояние привязано не к функции компонента, а к его <b>позиции в дереве</b>. Один и тот же компонент на том же месте сохраняет состояние между рендерами, даже если рендерится из разных веток условия. Чтобы сбросить состояние принудительно, меняют <code>key</code>.</p>\n<div class=\"code-label\">ChatPage.jsx</div><pre class=\"code\">function ChatPage({ contactId }) {\n  <span class=\"c\">// новый key при смене контакта — Chat монтируется заново,</span>\n  <span class=\"c\">// черновик сообщения из прошлого чата не «переезжает»</span>\n  return &lt;Chat key={contactId} contactId={contactId} /&gt;\n}\n\nfunction Form({ isAdmin }) {\n  <span class=\"c\">// тот же тип на той же позиции: состояние Input сохранится</span>\n  return isAdmin ? &lt;Input placeholder=\"admin\" /&gt; : &lt;Input placeholder=\"user\" /&gt;\n}</pre>\n<div class=\"note warn\">Ловушка: не объявляйте компонент внутри другого компонента. При каждом рендере родителя создаётся новая функция, то есть новый тип, и React размонтирует и смонтирует потомка заново: теряется состояние, сбрасывается фокус в полях, повторно срабатывают эффекты. Компоненты объявляют на верхнем уровне модуля.</div>\n<div class=\"code-label\">Плохо: новый тип на каждый рендер</div><pre class=\"code\">function Parent() {\n  const [text, setText] = useState('')\n  function Field() { <span class=\"c\">// при каждом вводе — новый компонент</span>\n    return &lt;input value={text} onChange={(e) =&gt; setText(e.target.value)} /&gt;\n  }\n  return &lt;Field /&gt; <span class=\"c\">// поле теряет фокус после каждого символа</span>\n}</pre>\n<h3>Fiber: зачем React переписали</h3>\n<p>Fiber — внутренняя архитектура React начиная с 16-й версии. Каждый компонент и элемент представлен объектом-«волокном» (fiber) со ссылками на родителя, первого потомка и соседа, а также с состоянием хуков и очередью обновлений. Раньше рендер шёл рекурсией по стеку вызовов и не мог прерваться. Fiber превращает его в цикл по связному списку, который можно поставить на паузу, продолжить или выбросить.</p>\n<ul><li><b>Две версии дерева.</b> Current — то, что сейчас на экране; work-in-progress — то, что строится в рендере. После коммита они меняются ролями (double buffering).</li><li><b>Рендер прерываемый, коммит — нет.</b> В конкурентных обновлениях (transitions) React может отдать управление браузеру между компонентами. Коммит всегда синхронный, чтобы пользователь не увидел наполовину обновлённый DOM.</li><li><b>Приоритеты.</b> Ввод в поле обрабатывается раньше, чем фоновое обновление списка. Подробно это разбирается на senior-уровне.</li></ul>\n<div class=\"note warn\">Ловушка: раз рендер можно прервать и повторить, функция компонента должна быть чистой: без запросов, подписок и мутации внешних переменных. Именно поэтому <code>&lt;StrictMode&gt;</code> в режиме разработки вызывает компоненты дважды — так проявляются побочные эффекты в рендере. В продакшене двойного вызова нет.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Обновление идёт в три фазы: trigger, render и commit. Рендер — это вызов функций компонентов и сравнение нового дерева со старым, коммит — точечные изменения DOM и запуск эффектов. Компонент перерисовывается из-за своего состояния, рендера родителя, смены контекста или внешнего стора; сами по себе пропсы не причина. Reconciliation сопоставляет элементы по типу и позиции, а в списках по key: сменился тип — поддерево монтируется заново, и состояние теряется. Fiber делает рендер прерываемым, поэтому компоненты должны быть чистыми функциями.»</div>"
+    },
+    {
+      "title": "Мемоизация: memo, useMemo, useCallback и React Compiler",
+      "html": "<p>Вопросы о мемоизации — классика middle-собеседования: «Когда нужен useMemo?», «Почему memo не помогает?», «Чем useCallback отличается от useMemo?». В 2026 году к ним добавился ещё один: «Вы используете React Compiler и что он меняет?». Хороший ответ показывает, что вы понимаете, что именно сравнивается и где мемоизация ломается, а не расставляете хуки «на всякий случай».</p>\n<h3>memo: пропуск рендера при тех же пропсах</h3>\n<p><code>memo(Component)</code> возвращает компонент, который при рендере родителя сначала поверхностно сравнивает новые пропсы со старыми через <code>Object.is</code> по каждому ключу. Если все совпали, рендер пропускается и используется прошлый результат. Свои состояние и контекст по-прежнему вызывают перерисовку — memo влияет только на причину «перерисовался родитель».</p>\n<div class=\"code-label\">ProductList.jsx</div><pre class=\"code\">const Row = memo(function Row({ item, onSelect }) {\n  return &lt;li onClick={() =&gt; onSelect(item.id)}&gt;{item.title}&lt;/li&gt;\n})\n\nfunction ProductList({ items }) {\n  const [query, setQuery] = useState('')\n  <span class=\"c\">// новая функция на каждый рендер — memo у Row бесполезен</span>\n  const onSelect = (id) =&gt; console.log(id)\n  return items.map((item) =&gt; &lt;Row key={item.id} item={item} onSelect={onSelect} /&gt;)\n}</pre>\n<p>Поверхностное сравнение ломается на всём, что создаётся заново в каждом рендере: литералы объектов и массивов (<code>style={{ color: \"red\" }}</code>), стрелочные функции и JSX, переданный через <code>children</code>. Ссылка новая — значит, пропс «изменился».</p>\n<h3>useMemo и useCallback</h3>\n<p><code>useMemo(fn, deps)</code> вызывает <code>fn</code> и запоминает результат до тех пор, пока зависимости не изменятся (каждая сравнивается через <code>Object.is</code>). <code>useCallback(fn, deps)</code> запоминает саму функцию, а не результат её вызова: по сути это <code>useMemo(() =&gt; fn, deps)</code>.</p>\n<div class=\"table-wrap\"><table><thead><tr><th>Инструмент</th><th>Что кэширует</th><th>Когда оправдан</th></tr></thead><tbody><tr><td><code>memo</code></td><td>результат рендера компонента</td><td>компонент тяжёлый и часто рендерится с теми же пропсами</td></tr><tr><td><code>useMemo</code></td><td>значение</td><td>дорогое вычисление или стабильная ссылка для memo-потомка и зависимостей эффекта</td></tr><tr><td><code>useCallback</code></td><td>функцию</td><td>функция уходит в memo-компонент или в зависимости эффекта</td></tr></tbody></table></div>\n<div class=\"code-label\">ProductList.jsx — исправлено</div><pre class=\"code\">function ProductList({ items }) {\n  const [query, setQuery] = useState('')\n  const visible = useMemo(\n    () =&gt; items.filter((i) =&gt; i.title.includes(query)),\n    [items, query],\n  )\n  const onSelect = useCallback((id) =&gt; console.log(id), [])\n  return visible.map((item) =&gt; &lt;Row key={item.id} item={item} onSelect={onSelect} /&gt;)\n}</pre>\n<p>Мемоизация имеет цену: сравнение зависимостей на каждом рендере, память под кэш, более сложный код. Сам по себе <code>useCallback</code> без memo-потомка или эффекта ничего не ускоряет — функция всё равно создаётся при каждом рендере, просто React возвращает старую.</p>\n<div class=\"note warn\">Ловушка: зависимость, которая создаётся в рендере, обнуляет мемоизацию. <code>useMemo(() =&gt; compute(options), [options])</code>, где <code>options = { sort: \"asc\" }</code> объявлен в теле компонента, пересчитывается каждый раз. Выносите константы за пределы компонента или мемоизируйте саму зависимость.</div>\n<p>Есть и обратный приём, который часто лучше мемоизации: <b>опустить состояние вниз</b> или <b>передать тяжёлую часть через children</b>. Если быстро меняющееся состояние живёт в маленьком компоненте, а дорогое поддерево пришло к нему как <code>children</code>, то при обновлении состояния элементы <code>children</code> — те же объекты, созданные родителем, и React их не перерисовывает.</p>\n<h3>React Compiler: мемоизация на этапе сборки</h3>\n<p>React Compiler 1.0 вышел стабильным в октябре 2025 года. Это плагин сборки (<code>babel-plugin-react-compiler</code>), который анализирует компоненты и хуки и сам добавляет мемоизацию: кэширует вычисления, функции и JSX-элементы, причём точнее, чем вручную, — вплоть до отдельных значений внутри компонента и с учётом условных веток. Он работает с React 19, а для React 17 и 18 есть пакет <code>react-compiler-runtime</code>.</p>\n<div class=\"code-label\">vite.config.ts</div><pre class=\"code\">import react from '@vitejs/plugin-react'\n\nexport default defineConfig({\n  plugins: [\n    react({\n      babel: { plugins: ['babel-plugin-react-compiler'] }, <span class=\"c\">// компилятор первым в списке</span>\n    }),\n  ],\n})</pre>\n<p>В Next.js компилятор включается опцией <code>reactCompiler: true</code> в <code>next.config</code>. После включения большинство ручных <code>memo</code>, <code>useMemo</code> и <code>useCallback</code> становятся не нужны в новом коде. Существующие можно не удалять: компилятор с ними совместим. Ручные хуки остаются как «ручной рычаг» там, где нужна точная гарантия стабильной ссылки, например для зависимостей эффекта.</p>\n<figure class=\"figure\"><div class=\"flow\"><div class=\"step\"><b>Исходный код</b><span>обычный компонент без хуков мемоизации</span></div><div class=\"arrow\">→</div><div class=\"step hl\"><b>Анализ</b><span>проверка правил React, поиск зависимостей значений</span></div><div class=\"arrow\">→</div><div class=\"step good\"><b>Результат</b><span>кэш вычислений, колбэков и JSX по зависимостям</span></div><div class=\"arrow\">→</div><div class=\"step bad\"><b>Нарушение правил</b><span>компонент пропускается и работает как раньше</span></div></div><figcaption>Что делает компилятор с компонентом</figcaption></figure>\n<p>Компилятор опирается на <b>правила React</b>: компоненты и хуки чистые, пропсы и состояние не мутируются, хуки вызываются безусловно на верхнем уровне. Если он находит нарушение, то не ломает код, а просто не оптимизирует этот компонент. Нарушения показывает <code>eslint-plugin-react-hooks</code>: в актуальной версии правила компилятора входят в рекомендуемый набор. Отключить компиляцию для конкретного компонента можно директивой <code>'use no memo'</code> в начале функции.</p>\n<div class=\"note warn\">Ловушка: компилятор не спасает от мутаций. Если код меняет объект из пропсов или состояния на месте, закэшированный JSX не обновится, потому что ссылка та же. Код, который «работал» без компилятора благодаря лишним рендерам, после включения может начать показывать устаревшие данные — это сигнал исправить мутацию, а не отключать компилятор.</div>\n<div class=\"boxes\"><div class=\"box good\"><b>Так</b><span>Включить компилятор, писать чистые компоненты, исправлять предупреждения линтера. Ручную мемоизацию оставлять точечно — там, где нужна гарантия стабильной ссылки.</span></div><div class=\"box bad\"><b>Не так</b><span>Оборачивать каждую функцию в useCallback и каждый компонент в memo без замеров или отключать компилятор, вместо того чтобы найти мутацию.</span></div></div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«memo пропускает рендер компонента, если пропсы поверхностно равны, useMemo кэширует значение, useCallback — функцию. Всё это сравнивает ссылки, поэтому ломается на объектах и функциях, созданных в рендере, и на JSX в children. Мемоизация стоит памяти и сравнений, так что без замеров я её не расставляю, а сначала пробую опустить состояние вниз. В новых проектах включаю React Compiler 1.0: он мемоизирует автоматически и точнее, но требует соблюдать правила React — чистые компоненты и никаких мутаций.»</div>"
+    },
+    {
+      "title": "Свои хуки, Context и useReducer",
+      "html": "<p>Блок про переиспользование логики и общее состояние на собеседовании обычно открывают вопросом: «Как вынести логику из компонента?». Затем идут «Когда выбрать Context, а когда стор?» и «Зачем useReducer, если есть useState?». Vue-разработчику здесь многое знакомо: свои хуки похожи на composables, а Context — на <code>provide/inject</code>. Но есть важные отличия, и на них часто ловят.</p>\n<h3>Свои хуки: общая логика, не общее состояние</h3>\n<p>Свой хук — это функция с именем на <code>use</code>, внутри которой вызываются другие хуки. Префикс нужен не для красоты: по нему линтер и React Compiler понимают, что к функции применяются правила хуков. Каждый вызов хука получает <b>своё</b> состояние: два компонента с <code>useOnlineStatus()</code> не делят одну переменную, а подписываются независимо.</p>\n<div class=\"code-label\">useDebouncedValue.js</div><pre class=\"code\">export function useDebouncedValue(value, delay = 300) {\n  const [debounced, setDebounced] = useState(value)\n  useEffect(() =&gt; {\n    const id = setTimeout(() =&gt; setDebounced(value), delay)\n    return () =&gt; clearTimeout(id) <span class=\"c\">// очистка при смене value или размонтировании</span>\n  }, [value, delay])\n  return debounced\n}\n\n<span class=\"c\">// в компоненте</span>\nconst query = useDebouncedValue(input, 500)</pre>\n<p>Правила хуков: вызывать только на верхнем уровне компонента или другого хука, не внутри условий, циклов и обработчиков событий. React связывает хуки с ячейками состояния по <b>порядку вызова</b>, поэтому порядок должен быть одинаковым в каждом рендере. Исключение — <code>use</code>: его можно вызывать в условиях и циклах.</p>\n<div class=\"table-wrap\"><table><thead><tr><th></th><th>Свой хук React</th><th>Composable Vue</th></tr></thead><tbody><tr><td>Сколько раз выполняется</td><td>при каждом рендере компонента</td><td>один раз в setup</td></tr><tr><td>Где можно вызывать</td><td>только на верхнем уровне, без условий</td><td>где угодно в setup, порядок не важен</td></tr><tr><td>Общее состояние</td><td>нет, каждый вызов — своё</td><td>есть, если ref объявлен вне функции</td></tr><tr><td>Устаревшие замыкания</td><td>реальная проблема, нужны зависимости</td><td>нет, ref всегда актуален</td></tr></tbody></table></div>\n<div class=\"note warn\">Ловушка: не называйте <code>use…</code> обычную функцию без хуков и не прячьте хук под другим именем. В первом случае на неё зря распространятся ограничения, во втором линтер не заметит вызов хука в условии, и порядок хуков сломается.</div>\n<h3>Context: передача без prop drilling</h3>\n<p>Context передаёт значение вниз по дереву любому потомку, минуя промежуточные компоненты. В React 19 сам контекст можно рендерить как провайдер: <code>&lt;ThemeContext value={...}&gt;</code>. Запись <code>&lt;ThemeContext.Provider&gt;</code> пока работает, но в будущих версиях её объявят устаревшей. Читают значение через <code>useContext(Ctx)</code> или <code>use(Ctx)</code> — последний можно вызвать и после раннего <code>return</code> или внутри условия.</p>\n<div class=\"code-label\">AuthProvider.jsx</div><pre class=\"code\">const AuthContext = createContext(null)\n\nexport function AuthProvider({ children }) {\n  const [user, setUser] = useState(null)\n  <span class=\"c\">// без useMemo value — новый объект на каждый рендер провайдера</span>\n  const value = useMemo(() =&gt; ({ user, login: setUser }), [user])\n  return &lt;AuthContext value={value}&gt;{children}&lt;/AuthContext&gt;\n}\n\nexport function useAuth() {\n  const ctx = useContext(AuthContext)\n  if (!ctx) throw new Error('useAuth вне AuthProvider')\n  return ctx\n}</pre>\n<p>Главное, что нужно знать про производительность: <b>когда значение контекста меняется (по <code>Object.is</code>), перерисовываются все компоненты, которые его читают</b>, и <code>memo</code> у промежуточных компонентов этому не мешает. Компонент нельзя подписать на часть значения: если в контексте лежат и тема, и пользователь, смена темы перерисует всех, кому нужен только пользователь.</p>\n<ul><li>Мемоизируйте объект <code>value</code>, иначе любой рендер провайдера обновит всех потребителей (с React Compiler это происходит автоматически).</li><li>Разделяйте контексты по частоте изменений: тема отдельно, пользователь отдельно.</li><li>Выносите стабильные функции в отдельный контекст от данных — например, <code>dispatch</code> отдельно от <code>state</code>.</li></ul>\n<div class=\"note\">Context — это механизм передачи, а не стейт-менеджер. Для редко меняющихся данных (тема, локаль, текущий пользователь) он идеален. Для часто обновляемого глобального состояния с подпиской на часть данных лучше подходят Zustand, Redux Toolkit или MobX — их разбирают в отдельных направлениях.</div>\n<h3>useReducer: логика обновлений в одном месте</h3>\n<p><code>useReducer(reducer, initialState)</code> возвращает <code>[state, dispatch]</code>. Редьюсер — чистая функция <code>(state, action) =&gt; newState</code>: он не мутирует состояние, а возвращает новое. Это удобно, когда следующее состояние зависит от предыдущего сразу в нескольких полях, когда переходов много или когда логику хочется протестировать отдельно от компонента.</p>\n<div class=\"code-label\">cartReducer.js</div><pre class=\"code\">function cartReducer(state, action) {\n  switch (action.type) {\n    case 'added':\n      return { ...state, items: [...state.items, action.item] }\n    case 'removed':\n      return { ...state, items: state.items.filter((i) =&gt; i.id !== action.id) }\n    default:\n      throw new Error('Неизвестное действие ' + action.type)\n  }\n}\n\nconst [cart, dispatch] = useReducer(cartReducer, { items: [] })\ndispatch({ type: 'added', item })</pre>\n<p>У <code>dispatch</code> стабильная ссылка на всё время жизни компонента. Поэтому связка «<code>useReducer</code> + два контекста (состояние и dispatch)» — стандартный способ дать глубоким потомкам менять общее состояние: компоненты, которым нужен только <code>dispatch</code>, не перерисуются при изменении данных.</p>\n<div class=\"note warn\">Ловушка: мутировать <code>state</code> в редьюсере и возвращать его же — например, <code>state.items.push(item); return state</code>. Ссылка не изменилась, <code>Object.is</code> вернёт true, и React пропустит обновление. Для глубоко вложенных структур используют spread или библиотеку Immer.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Свой хук — это функция на use, которая выносит логику с хуками; каждый вызов получает своё состояние, в отличие от composable с ref вне функции. Хуки вызываются на верхнем уровне, потому что React связывает их по порядку. Context решает prop drilling, но при смене значения перерисовывает всех потребителей, поэтому я мемоизирую value и разделяю контексты по частоте изменений. useReducer беру, когда переходов состояния много: логика в чистой функции, а стабильный dispatch удобно отдать вниз через отдельный контекст.»</div>"
+    },
+    {
+      "title": "Данные и формы в React 19: Suspense, use, actions, useOptimistic",
+      "html": "<p>React 19 заметно изменил то, как в компонентах загружают данные и отправляют формы, и на собеседовании это проверяют: «Как работает Suspense?», «Что делает хук use?», «Что такое actions и чем useActionState лучше ручного isLoading?», «Как сделать оптимистичное обновление?». Middle-кандидат должен уметь написать форму на actions и объяснить, почему загрузка данных в <code>useEffect</code> больше не лучший вариант.</p>\n<h3>Suspense и хук use</h3>\n<p><code>&lt;Suspense fallback={...}&gt;</code> показывает запасной UI, пока какой-то компонент внутри «приостановлен» — ждёт код (<code>lazy</code>) или данные. В React 19 читать данные с приостановкой умеет хук <code>use(promise)</code>: если промис ещё не выполнен, компонент приостанавливается и ближайший Suspense показывает fallback; когда промис выполнится, React отрендерит компонент со значением. Если промис отклонён, ошибку получит ближайший Error Boundary.</p>\n<div class=\"code-label\">Comments.jsx</div><pre class=\"code\">function Comments({ commentsPromise }) {\n  const comments = use(commentsPromise) <span class=\"c\">// приостановка до выполнения промиса</span>\n  return comments.map((c) =&gt; &lt;p key={c.id}&gt;{c.text}&lt;/p&gt;)\n}\n\nfunction Post({ commentsPromise }) {\n  return (\n    &lt;Suspense fallback={&lt;Spinner /&gt;}&gt;\n      &lt;Comments commentsPromise={commentsPromise} /&gt;\n    &lt;/Suspense&gt;\n  )\n}</pre>\n<div class=\"note warn\">Ловушка: создавать промис прямо в рендере клиентского компонента — <code>use(fetch(url))</code>. На каждом рендере получится новый промис, компонент снова приостановится, и загрузка зациклится. Промис должен быть стабильным: его создаёт серверный компонент, роутер, библиотека с кэшем (например, <code>useSuspenseQuery</code> в TanStack Query) или код вне рендера.</div>\n<p>Чем это лучше <code>useEffect</code> с <code>fetch</code>? Эффект запускается только после первого рендера и коммита, поэтому загрузка начинается поздно и легко выстраивается «водопадом»: родитель загрузил данные, отрендерил потомка, тот начал свою загрузку. К тому же вручную нужно обрабатывать гонки ответов и состояние загрузки в каждом компоненте. С Suspense состояния загрузки описываются декларативно — границами в дереве.</p>\n<p>Ещё одно важное поведение: если обновление идёт внутри transition (например, переход роутера), React <b>не заменяет на fallback уже показанный контент</b>, а оставляет старый экран, пока новый не будет готов. Без transition уже видимая граница снова покажет спиннер.</p>\n<h3>Actions: асинхронные переходы и формы</h3>\n<p>Action — это функция, запускающая переход, в том числе асинхронная. В React 19 <code>startTransition</code> из <code>useTransition</code> принимает async-функцию, а <code>isPending</code> остаётся true, пока она выполняется. У <code>&lt;form&gt;</code> появился проп <code>action</code>: в него можно передать функцию, которая получит <code>FormData</code>. После успешного выполнения React сам сбросит неуправляемые поля формы.</p>\n<p>Для типичной формы есть <code>useActionState(action, initialState)</code>. Он возвращает <code>[state, formAction, isPending]</code>, а сама action получает предыдущее состояние и данные формы — так удобно возвращать ошибки валидации или ответ сервера.</p>\n<div class=\"code-label\">SubscribeForm.jsx</div><pre class=\"code\">async function subscribe(prevState, formData) {\n  const email = formData.get('email')\n  const res = await api.subscribe(email)\n  if (!res.ok) return { error: 'Не удалось подписаться' }\n  return { error: null }\n}\n\nfunction SubmitButton() {\n  const { pending } = useFormStatus() <span class=\"c\">// статус родительской формы</span>\n  return &lt;button disabled={pending}&gt;{pending ? 'Отправка…' : 'Подписаться'}&lt;/button&gt;\n}\n\nexport function SubscribeForm() {\n  const [state, formAction, isPending] = useActionState(subscribe, { error: null })\n  return (\n    &lt;form action={formAction}&gt;\n      &lt;input name=\"email\" type=\"email\" required /&gt;\n      &lt;SubmitButton /&gt;\n      {state.error &amp;&amp; &lt;p role=\"alert\"&gt;{state.error}&lt;/p&gt;}\n    &lt;/form&gt;\n  )\n}</pre>\n<p><code>useFormStatus</code> из <code>react-dom</code> возвращает <code>pending</code>, <code>data</code>, <code>method</code> и <code>action</code> отправляемой формы — без пропсов и контекста. Это удобно для кнопок дизайн-системы, которые используются во многих формах.</p>\n<div class=\"note warn\">Ловушка: <code>useFormStatus</code> видит только форму, внутри которой отрендерен компонент. Если вызвать его в том же компоненте, где написан <code>&lt;form&gt;</code>, <code>pending</code> всегда будет false. Кнопку выносят в отдельный компонент, как <code>SubmitButton</code> выше.</div>\n<div class=\"table-wrap\"><table><thead><tr><th>Хук</th><th>Что возвращает</th><th>Для чего</th></tr></thead><tbody><tr><td><code>useTransition</code></td><td><code>[isPending, startTransition]</code></td><td>любой async-переход с флагом ожидания</td></tr><tr><td><code>useActionState</code></td><td><code>[state, formAction, isPending]</code></td><td>форма с результатом и ошибками action</td></tr><tr><td><code>useFormStatus</code></td><td><code>{ pending, data, method, action }</code></td><td>статус родительской формы в дочернем компоненте</td></tr><tr><td><code>useOptimistic</code></td><td><code>[optimisticState, addOptimistic]</code></td><td>временное состояние, пока action выполняется</td></tr></tbody></table></div>\n<h3>useOptimistic: интерфейс не ждёт сервер</h3>\n<p><code>useOptimistic(state, updateFn)</code> возвращает копию состояния, которую можно временно изменить на время action. Пользователь сразу видит результат, например новое сообщение в чате. Когда action завершится, оптимистичное значение отбрасывается и React показывает настоящее <code>state</code>: при успехе там уже будут данные с сервера, при ошибке — прежнее значение, то есть откат происходит сам.</p>\n<div class=\"code-label\">Thread.jsx</div><pre class=\"code\">function Thread({ messages, sendMessage }) {\n  const [optimistic, addOptimistic] = useOptimistic(\n    messages,\n    (current, text) =&gt; [...current, { id: 'temp', text, sending: true }],\n  )\n\n  async function formAction(formData) {\n    const text = formData.get('text')\n    addOptimistic(text) <span class=\"c\">// вызывается внутри action</span>\n    await sendMessage(text) <span class=\"c\">// родитель обновит messages после ответа</span>\n  }\n\n  return (\n    &lt;form action={formAction}&gt;\n      {optimistic.map((m) =&gt; &lt;p key={m.id}&gt;{m.text}{m.sending &amp;&amp; ' (отправка…)'}&lt;/p&gt;)}\n      &lt;input name=\"text\" /&gt;\n    &lt;/form&gt;\n  )\n}</pre>\n<figure class=\"figure\"><div class=\"flow\"><div class=\"step\"><b>Submit</b><span>форма вызывает action</span></div><div class=\"arrow\">→</div><div class=\"step hl\"><b>addOptimistic</b><span>сообщение сразу в списке с пометкой</span></div><div class=\"arrow\">→</div><div class=\"step\"><b>Запрос</b><span>await sendMessage(text)</span></div><div class=\"arrow\">→</div><div class=\"step good\"><b>Готово</b><span>оптимистичное значение заменяется настоящим state</span></div></div><figcaption>Жизненный цикл оптимистичного обновления</figcaption></figure>\n<div class=\"note\">Для сравнения: во Vue похожие сценарии решают вручную — флаг загрузки в <code>ref</code>, try/catch, откат значения. Экспериментальный <code>&lt;Suspense&gt;</code> во Vue тоже есть, но для форм аналогов actions в ядре нет.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«В React 19 загрузку данных описываю через Suspense: компонент читает стабильный промис хуком use, а ближайшая граница показывает fallback, ошибка уходит в Error Boundary. Промис не создаю в рендере — его даёт роутер, сервер или библиотека с кэшем. Формы пишу на actions: useActionState даёт результат action и isPending, useFormStatus — статус формы в дочерней кнопке, а useOptimistic показывает изменение сразу и сам откатывает его, когда action завершилась.»</div>"
+    }
+  ],
+  "quizVariants": [
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Какое из событий само по себе НЕ является причиной перерисовки компонента без memo?",
+        "options": [
+          "Вызов сеттера useState с новым значением",
+          "Изменение пропсов без перерисовки родителя",
+          "Перерисовка родительского компонента",
+          "Смена значения контекста, который он читает"
+        ],
+        "answer": 1,
+        "explanation": "Пропсы меняются только потому, что перерисовался родитель — это и есть причина. Компонент рендерится из-за своего состояния, рендера родителя, контекста или подписки на внешний стор."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Поле ввода теряет фокус после каждого введённого символа. В чём причина?",
+        "code": "function Parent() {\n  const [text, setText] = useState('')\n  function Field() {\n    return <input value={text} onChange={(e) => setText(e.target.value)} />\n  }\n  return <Field />\n}",
+        "options": [
+          "Поле управляемое, а у управляемых полей React всегда сбрасывает фокус",
+          "Не хватает key у input, поэтому React не может его сопоставить",
+          "setText вызывается синхронно, нужно обернуть его в startTransition",
+          "Field объявлен внутри компонента, и в каждом рендере это новый тип"
+        ],
+        "answer": 3,
+        "explanation": "Компонент, объявленный внутри другого, при каждом рендере — новая функция, то есть новый тип. Reconciliation размонтирует старое поддерево и монтирует новое, поэтому DOM-узел input пересоздаётся и фокус теряется."
+      },
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Какую возможность даёт архитектура Fiber?",
+        "options": [
+          "Прерывать, откладывать и возобновлять рендер, сохраняя коммит синхронным",
+          "Отслеживать зависимости компонента, как реактивность Vue, без повторного вызова функции",
+          "Применять изменения к DOM частями, чтобы коммит не блокировал браузер",
+          "Выполнять функции компонентов в Web Worker, параллельно с основным потоком"
+        ],
+        "answer": 0,
+        "explanation": "Fiber превращает рендер в цикл по связному списку волокон, который можно прервать и продолжить. Коммит при этом всегда синхронный, чтобы пользователь не увидел частично обновлённый DOM."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Row обёрнут в memo, но всё равно рендерится при каждом вводе в поле поиска. Почему?",
+        "code": "const Row = memo(function Row({ item, onSelect }) { /* ... */ })\n\nfunction List({ items }) {\n  const [query, setQuery] = useState('')\n  const onSelect = (id) => console.log(id)\n  return items.map((item) => <Row key={item.id} item={item} onSelect={onSelect} />)\n}",
+        "options": [
+          "memo работает только с классовыми компонентами, а Row — функция",
+          "key у Row меняется при каждом рендере списка",
+          "onSelect — каждый раз новая функция, и memo видит новый проп",
+          "memo сравнивает пропсы глубоко, а item — вложенный объект"
+        ],
+        "answer": 2,
+        "explanation": "memo сравнивает каждый пропс через Object.is. Стрелочная функция, созданная в рендере, каждый раз новая ссылка. Нужен useCallback или React Compiler, который сделает это автоматически."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Как ведёт себя React Compiler, если находит в компоненте нарушение правил React?",
+        "options": [
+          "Пропускает оптимизацию этого компонента, и он работает как без компилятора",
+          "Останавливает сборку с ошибкой, пока нарушение не исправят",
+          "Переписывает код компонента так, чтобы мутация стала неизменяемым обновлением",
+          "Оборачивает компонент в memo, но не мемоизирует значения внутри него"
+        ],
+        "answer": 0,
+        "explanation": "Компилятор консервативен: при нарушении правил он не трогает компонент. Сами нарушения показывает eslint-plugin-react-hooks, а отключить компиляцию вручную можно директивой 'use no memo'."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Почему этот useMemo пересчитывает список на каждом рендере?",
+        "code": "function Table({ rows }) {\n  const options = { sort: 'asc' }\n  const sorted = useMemo(() => sortRows(rows, options), [rows, options])\n  return <Grid rows={sorted} />\n}",
+        "options": [
+          "useMemo не кэширует результат, если функция возвращает массив",
+          "options создаётся заново в каждом рендере, и зависимость всегда «новая»",
+          "Зависимости сравниваются глубоко, а rows — большой массив",
+          "useMemo пересчитывается всегда, он только откладывает вычисление"
+        ],
+        "answer": 1,
+        "explanation": "Каждая зависимость сравнивается через Object.is. Объект, объявленный в теле компонента, — новая ссылка на каждом рендере. Константу выносят за пределы компонента или мемоизируют."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Два компонента вызывают один и тот же свой хук useCounter(). Что верно про их состояние?",
+        "options": [
+          "Состояние общее, потому что хук объявлен в одном модуле",
+          "Состояние общее, только если оба компонента внутри одного провайдера",
+          "Второй вызов вернёт состояние первого, пока тот смонтирован",
+          "У каждого вызова своё независимое состояние"
+        ],
+        "answer": 3,
+        "explanation": "Свой хук переиспользует логику, а не состояние: useState внутри него создаёт ячейку для каждого компонента отдельно. Для общего состояния нужен Context, поднятие состояния или стор."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "В контексте лежат тема и пользователь. При смене темы перерисовывается UserBadge, который читает только user, хотя он обёрнут в memo. Что поможет?",
+        "code": "<AppContext value={{ theme, user }}>\n  <Layout />\n</AppContext>\n\nconst UserBadge = memo(() => {\n  const { user } = useContext(AppContext)\n  return <span>{user.name}</span>\n})",
+        "options": [
+          "Заменить useContext на use — он подписывается только на нужные поля",
+          "Обернуть Layout в memo, чтобы остановить обновление контекста",
+          "Разделить на ThemeContext и UserContext",
+          "Передать в memo функцию сравнения пропсов"
+        ],
+        "answer": 2,
+        "explanation": "При смене значения контекста перерисовываются все его потребители, и memo этому не мешает. Подписаться на часть значения нельзя, поэтому контексты разделяют по частоте изменений."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "После dispatch({ type: \"added\", item }) список на экране не обновляется. В чём ошибка?",
+        "code": "function reducer(state, action) {\n  switch (action.type) {\n    case 'added':\n      state.items.push(action.item)\n      return state\n  }\n}",
+        "options": [
+          "dispatch асинхронный, нужно дождаться его через await",
+          "Редьюсер возвращает ту же ссылку на state, и React пропускает рендер",
+          "В switch нет default, поэтому редьюсер возвращает undefined",
+          "useReducer не поддерживает массивы в состоянии, для списков нужен useState"
+        ],
+        "answer": 1,
+        "explanation": "Редьюсер должен возвращать новый объект. Мутация и возврат того же state дают Object.is === true, и React пропускает рендер. Правильно: { ...state, items: [...state.items, action.item] }."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Кнопка всегда активна, хотя форма отправляется несколько секунд. Почему pending всегда false?",
+        "code": "function Form() {\n  const { pending } = useFormStatus()\n  return (\n    <form action={save}>\n      <button disabled={pending}>Сохранить</button>\n    </form>\n  )\n}",
+        "options": [
+          "useFormStatus вызван не внутри формы, а в компоненте, который её рендерит",
+          "save должна быть объявлена через useActionState, иначе pending не работает",
+          "useFormStatus работает только в серверных компонентах",
+          "У формы не указан method=\"post\", поэтому статус не отслеживается"
+        ],
+        "answer": 0,
+        "explanation": "useFormStatus возвращает статус формы, внутри которой отрендерен компонент. Кнопку нужно вынести в отдельный компонент и разместить её внутри form."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что произойдёт с оптимистичным значением из useOptimistic, если запрос внутри action завершился ошибкой?",
+        "options": [
+          "Оно останется на экране, пока его не удалят вручную",
+          "React повторит action, пока запрос не завершится успешно",
+          "Компонент приостановится, и ближайший Suspense покажет fallback",
+          "Когда action завершится, React покажет настоящий state, то есть прежнее значение"
+        ],
+        "answer": 3,
+        "explanation": "Оптимистичное значение живёт только пока выполняется action. После её завершения React возвращается к переданному state: при ошибке он не изменился, и откат происходит сам."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Компонент бесконечно показывает спиннер и снова и снова отправляет запрос. Как это исправить?",
+        "code": "function Profile({ id }) {\n  const user = use(fetch('/api/users/' + id).then((r) => r.json()))\n  return <h1>{user.name}</h1>\n}",
+        "options": [
+          "Заменить use на useContext, он умеет читать промисы",
+          "Убрать Suspense вокруг Profile, тогда use дождётся промиса",
+          "Получать стабильный промис извне рендера: из пропсов, роутера или библиотеки с кэшем",
+          "Вызвать use внутри useEffect, чтобы запрос шёл после коммита"
+        ],
+        "answer": 2,
+        "explanation": "В каждом рендере создаётся новый промис, поэтому компонент снова приостанавливается. use ожидает стабильный промис, созданный вне рендера клиентского компонента. Вызывать хуки внутри useEffect нельзя."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Что React делает в фазе commit?",
+        "options": [
+          "Вызывает функции компонентов и сравнивает новое дерево со старым",
+          "Применяет изменения к DOM, обновляет рефы и запускает эффекты",
+          "Ставит обновление в очередь после вызова сеттера состояния",
+          "Отдаёт управление браузеру между компонентами, чтобы не блокировать ввод"
+        ],
+        "answer": 1,
+        "explanation": "В коммите React вносит в DOM минимальный набор изменений, обновляет рефы и запускает эффекты. Вызов функций компонентов и сравнение деревьев — это фаза render, и прерываться может только она, а коммит всегда синхронный."
+      },
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "На месте <div> в следующем рендере стал <section> с теми же потомками. Что будет с состоянием компонентов внутри?",
+        "options": [
+          "Сохранится, потому что потомки того же типа и на тех же позициях",
+          "Сохранится, если у потомков указаны стабильные key",
+          "Сбросится: старое поддерево размонтируется, новое смонтируется с нуля",
+          "Сбросится только у потомков без memo, остальные его сохранят"
+        ],
+        "answer": 2,
+        "explanation": "Элементы разного типа React считает разными деревьями: при смене типа всё поддерево размонтируется вместе с состоянием. Ни key, ни memo у потомков этому не мешают."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "По клику счётчик на экране не меняется, хотя user.visits растёт. Почему?",
+        "code": "const [user, setUser] = useState({ name: 'Аня', visits: 0 })\n\nfunction handleClick() {\n  user.visits += 1\n  setUser(user)\n}",
+        "options": [
+          "Сеттер получил ту же ссылку, Object.is вернул true, и обновление пропущено",
+          "setUser асинхронный, и новое значение появится только после второго клика",
+          "useState не отслеживает вложенные поля, для объектов нужен useReducer",
+          "React замечает изменение полей, но только при вызове сеттера вне обработчика"
+        ],
+        "answer": 0,
+        "explanation": "Мутированный объект — та же ссылка, а React сравнивает новое состояние со старым через Object.is и пропускает обновление. Нужно передать новый объект: setUser({ ...user, visits: user.visits + 1 })."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Чем useCallback(fn, deps) отличается от useMemo?",
+        "options": [
+          "useCallback запоминает результат вызова fn, а useMemo — саму функцию",
+          "useCallback не создаёт функцию заново при рендере, в отличие от useMemo",
+          "useCallback сравнивает зависимости глубоко, а useMemo — через Object.is",
+          "useCallback запоминает саму функцию, по сути это useMemo(() => fn, deps)"
+        ],
+        "answer": 3,
+        "explanation": "useCallback кэширует функцию, а useMemo — результат вызова. Функция-аргумент при этом всё равно создаётся в каждом рендере, React просто возвращает прежнюю, пока зависимости не изменились."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Avatar обёрнут в memo, но рендерится при каждом рендере Header. Что не так?",
+        "code": "const Avatar = memo(function Avatar({ src, style }) {\n  return <img src={src} style={style} />\n})\n\nfunction Header({ user }) {\n  return <Avatar src={user.photo} style={{ borderRadius: '50%' }} />\n}",
+        "options": [
+          "memo не работает с компонентами, которые рендерят нативные теги",
+          "Литерал style — новый объект в каждом рендере Header",
+          "src читается из объекта user, поэтому строка каждый раз новая",
+          "У Avatar нет key, и memo не может найти прошлые пропсы"
+        ],
+        "answer": 1,
+        "explanation": "memo сравнивает каждый проп через Object.is. Строки сравниваются по значению, а литерал объекта в JSX — новая ссылка на каждом рендере. Стиль выносят в константу вне компонента или мемоизируют."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Пользователь нажал «+» три раза, затем «Показать». Что выведет консоль?",
+        "code": "function Counter() {\n  const [count, setCount] = useState(0)\n  const show = useCallback(() => console.log(count), [])\n  return (\n    <>\n      <button onClick={() => setCount(count + 1)}>+</button>\n      <button onClick={show}>Показать</button>\n    </>\n  )\n}",
+        "options": [
+          "3 — useCallback всегда читает актуальное состояние",
+          "1 — обработчик «+» видит только начальный count",
+          "0 — функция запомнила count из первого рендера",
+          "undefined — замыкание теряет переменные после рендера"
+        ],
+        "answer": 2,
+        "explanation": "С пустым массивом зависимостей useCallback всё время возвращает функцию из первого рендера, и её замыкание видит count = 0. Счётчик при этом растёт до 3, ведь обработчик «+» создаётся заново в каждом рендере. Нужно указать [count] в зависимостях."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Почему хуки нельзя вызывать внутри условий и циклов?",
+        "options": [
+          "React связывает хуки с ячейками состояния по порядку вызова",
+          "Хуки внутри условий выполняются только при первом рендере",
+          "Условия мешают React Compiler, а без него такой код работает",
+          "React находит хуки по имени переменной, а в условии оно может совпасть"
+        ],
+        "answer": 0,
+        "explanation": "У React нет имён для хуков: он сопоставляет вызовы с ячейками состояния по их порядку, поэтому порядок должен быть одинаковым в каждом рендере. Исключение — use, его можно вызывать в условиях."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Все потребители AuthContext перерисовываются при каждом рендере AuthProvider, даже если user не менялся. Как исправить без React Compiler?",
+        "code": "function AuthProvider({ children }) {\n  const [user, setUser] = useState(null)\n  return (\n    <AuthContext value={{ user, login: setUser }}>\n      {children}\n    </AuthContext>\n  )\n}",
+        "options": [
+          "Обернуть каждого потребителя контекста в memo",
+          "Заменить запись на <AuthContext.Provider value>",
+          "Читать контекст через use вместо useContext",
+          "Обернуть value в useMemo с зависимостью [user]"
+        ],
+        "answer": 3,
+        "explanation": "Литерал объекта в value — новая ссылка на каждом рендере провайдера, а потребители перерисовываются, когда значение меняется по Object.is. memo у потребителей не помогает: обновление контекста его обходит."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Состояние корзины и dispatch лежат в двух разных контекстах, провайдер рендерит children. Какие компоненты перерисуются после добавления товара?",
+        "code": "function AddButton({ item }) {\n  const dispatch = useContext(CartDispatchContext)\n  return <button onClick={() => dispatch({ type: 'added', item })}>В корзину</button>\n}\n\nfunction CartBadge() {\n  const { items } = useContext(CartStateContext)\n  return <span>{items.length}</span>\n}",
+        "options": [
+          "Только CartBadge: значение CartDispatchContext не меняется",
+          "Оба: при смене любого контекста рендерятся все потомки провайдера",
+          "Только AddButton, потому что именно он вызвал dispatch",
+          "Никакие: без рендера родителя потомки не обновляются"
+        ],
+        "answer": 0,
+        "explanation": "У dispatch стабильная ссылка на всё время жизни компонента, поэтому контекст с ним не меняется, и AddButton не перерисуется. Перерисуются только потребители контекста с состоянием, ради этого их и разделяют."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что произойдёт, если промис, переданный в use, будет отклонён?",
+        "options": [
+          "use вернёт undefined, и компонент отрендерится без данных",
+          "Ближайший Suspense будет показывать fallback бесконечно",
+          "Ошибку получит ближайший Error Boundary",
+          "React повторит запрос, создав промис заново"
+        ],
+        "answer": 2,
+        "explanation": "Пока промис ожидает, компонент приостановлен и виден fallback Suspense. Отклонённый промис превращается в ошибку рендера, и её обрабатывает ближайший Error Boundary."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "При отправке формы падает ошибка «formData.get is not a function». В чём причина?",
+        "code": "async function save(formData) {\n  const title = formData.get('title')\n  await api.save(title)\n  return { ok: true }\n}\n\nfunction Editor() {\n  const [state, formAction] = useActionState(save, { ok: false })\n  return <form action={formAction}>{/* ... */}</form>\n}",
+        "options": [
+          "FormData доступна только в серверных функциях с директивой «use server»",
+          "action в useActionState первым аргументом получает предыдущее состояние",
+          "action формы должна быть синхронной, async-функция ломает FormData",
+          "useActionState передаёт поля формы обычным объектом, а не FormData"
+        ],
+        "answer": 1,
+        "explanation": "Сигнатура action для useActionState — (prevState, formData). Здесь первым аргументом приходит { ok: false }, у которого нет метода get. Нужно объявить save(prevState, formData)."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "После успешной отправки поле name очистилось, хотя код этого не делает. Почему?",
+        "code": "<form action={async (formData) => {\n  await addUser(formData.get('name'))\n}}>\n  <input name=\"name\" />\n  <button>Добавить</button>\n</form>",
+        "options": [
+          "Браузер перезагрузил страницу, потому что не вызван preventDefault",
+          "Компонент размонтировался и смонтировался заново после await",
+          "Поле без value очищается при любом рендере родительского компонента",
+          "После успешной action React сам сбрасывает неуправляемые поля формы"
+        ],
+        "answer": 3,
+        "explanation": "Когда в проп action формы передана функция, React не перезагружает страницу, а после успешного выполнения сам сбрасывает неуправляемые поля. Перезагрузка и preventDefault здесь ни при чём."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Сеттер useState вызвали с тем же значением, что уже в состоянии (по Object.is). Что сделает React?",
+        "options": [
+          "Перерисует компонент и всех потомков, но не изменит DOM",
+          "Выведет в режиме разработки предупреждение о лишнем вызове сеттера",
+          "Отложит обновление до следующего изменения любого состояния",
+          "Пропустит обновление и не пойдёт дальше по дереву к потомкам"
+        ],
+        "answer": 3,
+        "explanation": "Если новое значение совпало со старым по Object.is, React пропускает обновление. Он может один раз вызвать сам компонент, прежде чем убедиться в этом, но потомков рендерить не станет."
+      },
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Зачем <StrictMode> в режиме разработки вызывает функции компонентов дважды?",
+        "options": [
+          "Чтобы прогреть кэш React Compiler перед первым коммитом",
+          "Чтобы сравнить два результата и выбрать более быстрый вариант рендера",
+          "Чтобы проявились побочные эффекты в рендере, который должен быть чистым",
+          "Так же React делает и в продакшене, StrictMode лишь сообщает об этом"
+        ],
+        "answer": 2,
+        "explanation": "Рендер в Fiber можно прервать и повторить, поэтому компонент должен быть чистой функцией. Двойной вызов в разработке выявляет запросы, подписки и мутации в рендере; в продакшене его нет."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Пользователь ввёл текст в поле, затем isAdmin переключился. Что станет с введённым текстом?",
+        "code": "function Form({ isAdmin }) {\n  // Input хранит текст в своём useState\n  return isAdmin\n    ? <Input placeholder=\"admin\" />\n    : <Input placeholder=\"user\" />\n}",
+        "options": [
+          "Сбросится: это разные ветки условия, и React смонтирует новый Input",
+          "Сохранится: тот же тип на той же позиции, обновится только placeholder",
+          "Сбросится, потому что изменился проп placeholder",
+          "Сохранится, только если обернуть Input в memo"
+        ],
+        "answer": 1,
+        "explanation": "Состояние привязано к позиции в дереве, а не к строке кода. В обеих ветках на одном месте стоит Input, поэтому React обновляет его пропсы и сохраняет состояние; сбросить его можно разными key."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Компонент обёрнут в memo. Что из перечисленного всё равно вызовет его перерисовку?",
+        "options": [
+          "Рендер родителя с теми же по Object.is значениями пропсов",
+          "Изменение значения контекста, который он читает",
+          "Рендер соседнего компонента в том же списке",
+          "Вызов сеттера родителя с тем же значением"
+        ],
+        "answer": 1,
+        "explanation": "memo влияет только на одну причину — рендер родителя. Собственное состояние и смена контекста, который читает компонент, по-прежнему вызывают перерисовку."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Card обёрнут в memo, но рендерится каждый раз вместе с Page. Почему?",
+        "code": "const Card = memo(function Card({ children }) {\n  return <div className=\"card\">{children}</div>\n})\n\nfunction Page() {\n  const [tick, setTick] = useState(0)\n  // ...\n  return <Card><p>Привет</p></Card>\n}",
+        "options": [
+          "memo не сравнивает компоненты с children и всегда рендерит их заново",
+          "Card не читает tick, поэтому memo не может сравнить пропсы",
+          "Card нужно объявить через useCallback, а не через memo",
+          "children — новый JSX-элемент на каждом рендере Page, проп меняется"
+        ],
+        "answer": 3,
+        "explanation": "JSX, переданный через children, — новый объект при каждом рендере родителя, и поверхностное сравнение видит новый проп. Помогает мемоизация самого элемента или React Compiler, который кэширует JSX."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "reset обёрнут в useCallback. Перестанет ли Button перерисовываться при вводе в поле?",
+        "code": "function Button({ onClick }) {\n  return <button onClick={onClick}>Очистить</button>\n}\n\nfunction Editor() {\n  const [text, setText] = useState('')\n  const reset = useCallback(() => setText(''), [])\n  return (\n    <>\n      <input value={text} onChange={(e) => setText(e.target.value)} />\n      <Button onClick={reset} />\n    </>\n  )\n}",
+        "options": [
+          "Нет: Button не обёрнут в memo и рендерится вместе с родителем",
+          "Да: ссылка на reset стабильна, и React пропустит рендер Button",
+          "Да, но только в продакшене — в разработке мешает StrictMode",
+          "Нет: с пустыми зависимостями useCallback создаёт функцию заново"
+        ],
+        "answer": 0,
+        "explanation": "Без memo потомки рендерятся вместе с родителем независимо от пропсов. Стабильная ссылка от useCallback полезна, только если её сравнивает memo-компонент или массив зависимостей эффекта."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Зачем имя своего хука начинают с use?",
+        "options": [
+          "Без префикса React не создаст для хука отдельную ячейку состояния",
+          "По префиксу линтер и React Compiler применяют к функции правила хуков",
+          "Префикс делает состояние хука общим для всех компонентов",
+          "Это требование TypeScript для вывода типа возвращаемого значения"
+        ],
+        "answer": 1,
+        "explanation": "Самому React имя не важно, но линтер и компилятор по префиксу use понимают, что внутри вызываются хуки, и проверяют правила. Состояние каждого вызова остаётся независимым."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Компонент падает с ошибкой, когда user из null становится объектом. Как исправить?",
+        "code": "function Profile({ user }) {\n  if (!user) return <Spinner />\n  const [tab, setTab] = useState('info')\n  return <Tabs value={tab} onChange={setTab} />\n}",
+        "options": [
+          "Перенести useState выше раннего return, на верхний уровень",
+          "Заменить useState на use, его можно вызывать после return",
+          "Обернуть Profile в memo, чтобы число хуков между рендерами не менялось",
+          "Вызывать useState внутри useEffect, после коммита"
+        ],
+        "answer": 0,
+        "explanation": "В первом рендере хуков ноль, во втором — один, и порядок вызовов ломается. Хуки ставят до любых ранних return. use можно вызывать в условии, но он читает промис или контекст и не заменяет состояние."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Что отрендерит Label, если над ним нет ни одного провайдера LocaleContext?",
+        "code": "const LocaleContext = createContext('ru')\n\nfunction Label() {\n  const locale = useContext(LocaleContext)\n  return <span>{locale}</span>\n}",
+        "options": [
+          "Пустой span: без провайдера useContext возвращает undefined",
+          "Ничего: React выбросит ошибку об отсутствии провайдера",
+          "«ru» — значение по умолчанию, переданное в createContext",
+          "null, пока ближайший провайдер не будет смонтирован"
+        ],
+        "answer": 2,
+        "explanation": "Без провайдера выше по дереву useContext возвращает значение по умолчанию из createContext. Поэтому в примере AuthProvider по умолчанию стоит null, а хук useAuth сам выбрасывает ошибку."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Чем загрузка данных в useEffect хуже, чем Suspense с хуком use?",
+        "options": [
+          "В useEffect нельзя вызывать fetch, только сторонние библиотеки",
+          "useEffect запускается до рендера и блокирует первую отрисовку",
+          "Результат запроса из useEffect нельзя сохранить без useReducer",
+          "Запрос стартует только после рендера и коммита, и легко возникает водопад"
+        ],
+        "answer": 3,
+        "explanation": "Эффект срабатывает после коммита, поэтому загрузка начинается поздно, а вложенные компоненты грузят данные по очереди. Вдобавок гонки ответов и флаги загрузки приходится обрабатывать вручную в каждом компоненте."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Как долго isPending будет true после вызова handleSave в React 19?",
+        "code": "const [isPending, startTransition] = useTransition()\n\nfunction handleSave() {\n  startTransition(async () => {\n    await api.save(draft)\n  })\n}",
+        "options": [
+          "Только до первого await, дальше переход считается завершённым",
+          "Пока выполняется async-функция, включая ожидание api.save",
+          "Всегда false: async-функции startTransition не поддерживает",
+          "До ближайшего рендера компонента, независимо от запроса"
+        ],
+        "answer": 1,
+        "explanation": "В React 19 startTransition принимает async-функцию, и isPending остаётся true, пока она не завершится. Такая функция и называется action."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Роутер выполняет переход внутри transition, новая страница приостанавливается в use. Что увидит пользователь, пока данные грузятся?",
+        "options": [
+          "Fallback ближайшего Suspense вместо текущей страницы",
+          "Пустой экран, пока промис не выполнится",
+          "Прежнюю страницу, пока новая не будет готова",
+          "Ошибку: use нельзя вызывать внутри transition"
+        ],
+        "answer": 2,
+        "explanation": "Внутри transition React не заменяет на fallback уже показанный контент, а держит старый экран до готовности нового. Без transition видимая граница снова показала бы спиннер."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Компонент отрендерился, но результат совпал с прошлым. Чего стоил такой рендер?",
+        "options": [
+          "Полной замены его DOM-узлов, как при первом монтировании",
+          "Повторного запуска всех его useEffect, независимо от зависимостей",
+          "Времени на вызов функции и сравнение, без операций с DOM",
+          "Ничего: React не вызывает функцию, если пропсы не менялись"
+        ],
+        "answer": 2,
+        "explanation": "Рендер — это вызов функции и сравнение деревьев; если результат тот же, коммит этот участок не трогает. Отсутствие изменений пропсов само по себе рендер не отменяет — для этого нужен memo."
+      },
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Что такое деревья current и work-in-progress в Fiber?",
+        "options": [
+          "Видимое на экране и строящееся в рендере; после коммита они меняются ролями",
+          "Дерево серверных компонентов и дерево клиентских компонентов",
+          "Виртуальный DOM и настоящий DOM, которые сравниваются при коммите",
+          "Дерево до двойного вызова StrictMode и дерево после него"
+        ],
+        "answer": 0,
+        "explanation": "Current описывает то, что сейчас на экране, а work-in-progress строится во время рендера. После коммита они меняются ролями — это double buffering, благодаря которому рендер можно бросить, не испортив экран."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "При переключении контакта в Chat остаётся черновик из прошлого чата. Как сбросить его состояние?",
+        "code": "function ChatPage({ contactId }) {\n  // Chat хранит черновик сообщения в useState\n  return <Chat contactId={contactId} />\n}",
+        "options": [
+          "Обернуть Chat в memo, чтобы он сравнивал contactId",
+          "Очищать черновик в useLayoutEffect на каждом рендере",
+          "Вызвать setState с тем же значением, чтобы сбросить ячейку",
+          "Передать key={contactId}, чтобы Chat монтировался заново"
+        ],
+        "answer": 3,
+        "explanation": "Тот же компонент на той же позиции сохраняет состояние. Новый key при смене контакта заставляет React размонтировать старый Chat и смонтировать новый с чистым состоянием."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Как отключить React Compiler для одного компонента?",
+        "options": [
+          "Обернуть компонент в memo с функцией сравнения",
+          "Добавить директиву 'use no memo' в начало функции",
+          "Назвать компонент с маленькой буквы, без префикса use",
+          "Вызвать в нём useMemo с пустым массивом зависимостей"
+        ],
+        "answer": 1,
+        "explanation": "Директива 'use no memo' в начале функции исключает компонент из компиляции. Обычно её ставят временно, пока ищут нарушение правил React в этом компоненте."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Курсор двигается часто. Перерисуется ли ExpensiveTree при каждом движении?",
+        "code": "function MouseTracker({ children }) {\n  const [pos, setPos] = useState({ x: 0, y: 0 })\n  return (\n    <div onPointerMove={(e) => setPos({ x: e.clientX, y: e.clientY })}>\n      {children}\n    </div>\n  )\n}\n\nfunction App() {\n  return (\n    <MouseTracker>\n      <ExpensiveTree />\n    </MouseTracker>\n  )\n}",
+        "options": [
+          "Да: потомки всегда рендерятся вместе с компонентом, который их выводит",
+          "Да, если ExpensiveTree не обёрнут в memo",
+          "Нет: элемент создан в App и при обновлении MouseTracker остаётся тем же",
+          "Нет, но только с включённым React Compiler"
+        ],
+        "answer": 2,
+        "explanation": "Элемент <ExpensiveTree /> создал App, который не перерисовывается. При обновлении MouseTracker children — тот же объект, и React его пропускает. Это приём «передать тяжёлую часть через children» вместо мемоизации."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "После включения React Compiler часть экрана показывает устаревшие данные. Обработчики меняют объекты из состояния на месте. Что правильно сделать?",
+        "options": [
+          "Заменить мутации на неизменяемые обновления",
+          "Отключить компилятор для всего проекта",
+          "Добавить useMemo вокруг каждого JSX-блока",
+          "Обернуть все компоненты вручную в memo"
+        ],
+        "answer": 0,
+        "explanation": "Компилятор кэширует JSX по ссылкам, а мутированный объект — та же ссылка, поэтому кэш не обновляется. Раньше код «работал» за счёт лишних рендеров; устаревшие данные — сигнал исправить мутацию, а не выключать компилятор."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Как в React 19 рекомендуется подключать провайдер контекста?",
+        "options": [
+          "Только через <ThemeContext.Provider>, иначе будет ошибка",
+          "Вызвать useProvider(ThemeContext, theme) в корне",
+          "Рендерить сам контекст: <ThemeContext value={theme}>",
+          "Вызвать use(ThemeContext, theme) в любом родителе"
+        ],
+        "answer": 2,
+        "explanation": "В React 19 контекст можно рендерить как провайдер. Запись <ThemeContext.Provider> пока работает, но в будущих версиях её объявят устаревшей."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Поле было пустым, пользователь быстро набрал «abc». Что вернёт useDebouncedValue(input, 500) сразу после ввода «c»?",
+        "code": "export function useDebouncedValue(value, delay = 300) {\n  const [debounced, setDebounced] = useState(value)\n  useEffect(() => {\n    const id = setTimeout(() => setDebounced(value), delay)\n    return () => clearTimeout(id)\n  }, [value, delay])\n  return debounced\n}",
+        "options": [
+          "«abc» — хук сразу возвращает последнее значение",
+          "«a» — первый таймер не очищается и сработает раньше",
+          "«ab» — значение всегда отстаёт на один символ",
+          "Пустую строку, а «abc» появится через 500 мс"
+        ],
+        "answer": 3,
+        "explanation": "При каждой смене value очистка эффекта отменяет прошлый таймер, поэтому «a» и «ab» не применятся. До срабатывания последнего таймера хук возвращает прежнее значение — пустую строку."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Допустим ли такой код?",
+        "code": "function Heading({ children }) {\n  if (children == null) return null\n  const theme = use(ThemeContext)\n  return <h1 className={theme}>{children}</h1>\n}",
+        "options": [
+          "Да: use, в отличие от useContext, можно вызвать после раннего return",
+          "Нет: любые хуки после раннего return нарушают правила хуков",
+          "Да, но только в серверных компонентах",
+          "Нет: use читает только промисы, а не контекст"
+        ],
+        "answer": 0,
+        "explanation": "use — исключение из правил хуков: его можно вызывать в условиях, циклах и после раннего return. Он читает и промисы, и контекст."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что возвращает useFormStatus?",
+        "options": [
+          "[state, formAction, isPending] для формы с её ошибками",
+          "{ pending, data, method, action } родительской формы",
+          "Массив статусов всех форм на странице",
+          "Результат последней action и её ошибку"
+        ],
+        "answer": 1,
+        "explanation": "useFormStatus из react-dom отдаёт статус формы, внутри которой отрендерен компонент. Кортеж [state, formAction, isPending] возвращает useActionState."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Как показать спиннер, пока загружается код Settings?",
+        "code": "const Settings = lazy(() => import('./Settings'))\n\nfunction App() {\n  return <Settings />\n}",
+        "options": [
+          "Обернуть <Settings /> в <Suspense fallback={<Spinner />}>",
+          "Хранить флаг isLoading в useState и сбрасывать его в useEffect",
+          "Вызвать use(Settings) и проверить результат на undefined",
+          "Передать компонент-спиннер вторым аргументом в lazy"
+        ],
+        "answer": 0,
+        "explanation": "Компонент из lazy приостанавливается, пока грузится его код, и ближайшая граница Suspense показывает fallback. Ручной флаг ничего не знает о загрузке чанка."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Что увидит пользователь сразу после отправки, пока sendMessage ещё выполняется?",
+        "code": "const [optimistic, addOptimistic] = useOptimistic(\n  messages,\n  (current, text) => [...current, { id: 'temp', text, sending: true }],\n)\n\nasync function formAction(formData) {\n  const text = formData.get('text')\n  addOptimistic(text)\n  await sendMessage(text)\n}\n// в списке: {m.text}{m.sending && ' (отправка…)'}",
+        "options": [
+          "Список без нового сообщения до ответа сервера",
+          "Новое сообщение с пометкой «(отправка…)»",
+          "Fallback ближайшего Suspense вместо списка",
+          "Новое сообщение без пометки, sending сразу false"
+        ],
+        "answer": 1,
+        "explanation": "addOptimistic внутри action сразу добавляет временное сообщение с sending: true. Когда action завершится, оптимистичное значение заменится настоящим messages."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Почему reconciliation сопоставляет элементы по типу и key, а не ищет оптимальное соответствие деревьев?",
+        "options": [
+          "Оптимальный поиск React выполняет только в продакшен-сборке",
+          "Эвристики нужны лишь для списков, остальное сравнивается полностью",
+          "Оптимальное соответствие React ищет позже, в фазе commit",
+          "Оптимальный поиск слишком дорог, а эвристики дают хороший результат быстро"
+        ],
+        "answer": 3,
+        "explanation": "Точный поиск минимальной разницы между деревьями слишком дорог для каждого обновления. Поэтому React опирается на две эвристики: разный тип — разное дерево, в списках — сопоставление по key."
+      },
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Когда выполняется useLayoutEffect относительно useEffect?",
+        "options": [
+          "До рендера компонента, а useEffect — уже после коммита в DOM",
+          "Синхронно в коммите до отрисовки, а useEffect — после неё",
+          "Одновременно, отличается только порядок очистки",
+          "После useEffect, когда браузер уже нарисовал кадр"
+        ],
+        "answer": 1,
+        "explanation": "Оба эффекта запускаются в фазе commit, но useLayoutEffect — синхронно, до того как браузер нарисует кадр, а useEffect — после отрисовки. До рендера эффекты не выполняются никогда."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Строки рендерятся с key={index}. Пользователь ввёл текст в поле первой строки, затем первый элемент удалили из items. Что произойдёт?",
+        "code": "{items.map((item, index) => (\n  <Row key={index} label={item.label} />\n))}\n// Row хранит введённый текст в своём useState",
+        "options": [
+          "Удалится нужная строка вместе с её состоянием",
+          "React выбросит ошибку о нестабильных ключах",
+          "Введённый текст останется в строке с подписью второго элемента",
+          "Состояние всех строк сбросится, потому что ключи сдвинулись"
+        ],
+        "answer": 2,
+        "explanation": "Ключ 0 теперь у бывшего второго элемента, и React считает его той же строкой: обновляет label, а состояние сохраняет. Размонтируется последняя строка. Поэтому для изменяемых списков нужен стабильный id."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что делать с уже написанными useMemo и useCallback после включения React Compiler?",
+        "options": [
+          "Можно оставить: компилятор совместим с ручной мемоизацией",
+          "Обязательно удалить: компилятор с ними конфликтует",
+          "Заменить на директиву 'use memo' в каждом компоненте",
+          "Переписать на memo, потому что компилятор понимает только его"
+        ],
+        "answer": 0,
+        "explanation": "Компилятор совместим с ручной мемоизацией, поэтому существующие хуки удалять не обязательно. В новом коде они обычно не нужны и остаются точечно — там, где требуется гарантия стабильной ссылки."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Список не фильтруется при вводе в поле поиска. В чём ошибка?",
+        "code": "function Products({ items }) {\n  const [query, setQuery] = useState('')\n  const visible = useMemo(\n    () => items.filter((i) => i.title.includes(query)),\n    [items],\n  )\n  // ...\n}",
+        "options": [
+          "filter создаёт новый массив, и useMemo его отбрасывает",
+          "useMemo нельзя вызывать в одном компоненте вместе с useState",
+          "В зависимостях нет query, поэтому кэш не пересчитывается",
+          "items сравнивается глубоко, и изменения query теряются"
+        ],
+        "answer": 2,
+        "explanation": "useMemo пересчитывает значение, только когда меняется одна из зависимостей. query меняется, но его нет в массиве, поэтому возвращается старый результат. Нужно [items, query]."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Эффект отписывается и подписывается заново на каждом рендере. Как это исправить?",
+        "code": "function Chat({ roomId }) {\n  const [messages, setMessages] = useState([])\n  const onMessage = (m) => setMessages((prev) => [...prev, m])\n\n  useEffect(() => {\n    socket.on(roomId, onMessage)\n    return () => socket.off(roomId, onMessage)\n  }, [roomId, onMessage])\n  // ...\n}",
+        "options": [
+          "Убрать функцию очистки, чтобы подписка не снималась при каждом рендере",
+          "Мемоизировать onMessage через useCallback с пустыми зависимостями",
+          "Заменить useEffect на useLayoutEffect, он не зависит от рендеров",
+          "Обернуть Chat в memo, чтобы onMessage стал стабильным"
+        ],
+        "answer": 1,
+        "explanation": "onMessage — новая функция на каждом рендере, и эффект видит изменившуюся зависимость. useCallback даёт стабильную ссылку; пустые зависимости безопасны, потому что сеттер стабилен и обновление функциональное."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "В каком случае useReducer удобнее, чем несколько useState?",
+        "options": [
+          "Когда состояние — примитив вроде числа или строки",
+          "Когда переходов много и следующее состояние зависит от нескольких полей",
+          "Когда состояние нужно сделать общим для всех компонентов без контекста",
+          "Когда обновления должны применяться синхронно, а не пакетно"
+        ],
+        "answer": 1,
+        "explanation": "useReducer собирает логику переходов в одной чистой функции, которую легко протестировать отдельно. Общим состояние он сам по себе не делает: каждый вызов хранит своё."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Координаты курсора обновляются десятки раз в секунду и лежат в общем контексте вместе с настройками. Тормозит всё приложение. Какое решение лучше?",
+        "options": [
+          "Вынести координаты в стор с подпиской на часть данных, например Zustand",
+          "Обернуть все компоненты в memo, чтобы контекст их не обновлял",
+          "Читать контекст через use вместо useContext",
+          "Передавать координаты пропсами через всё дерево"
+        ],
+        "answer": 0,
+        "explanation": "Context — механизм передачи, а не стейт-менеджер: при смене значения перерисовываются все его потребители, и memo этому не мешает. Для часто меняющегося глобального состояния подходят сторы с подпиской на нужную часть."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Как правильно обновить имя пользователя в редьюсере?",
+        "code": "// state = { user: { name: 'Аня', age: 30 }, theme: 'dark' }\ncase 'renamed':\n  return /* ? */",
+        "options": [
+          "{ ...state, user: Object.assign(state.user, { name: action.name }) }",
+          "{ ...state, user: { name: action.name } }",
+          "{ ...state, name: action.name, user: state.user }",
+          "{ ...state, user: { ...state.user, name: action.name } }"
+        ],
+        "answer": 3,
+        "explanation": "Новые объекты нужны на каждом уровне вложенности, а прежние поля копируются через spread. Object.assign мутирует state.user, а вариант без spread внутри потеряет age."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что получит функция, переданная в проп action у <form>?",
+        "options": [
+          "Объект FormData с полями формы",
+          "Событие submit, у которого нужно вызвать preventDefault",
+          "Объект с полями по атрибутам name, уже приведённый к JSON",
+          "Ссылку на DOM-элемент формы"
+        ],
+        "answer": 0,
+        "explanation": "В React 19 проп action формы принимает функцию, которая получает FormData; значения читают через formData.get(name). Отменять стандартную отправку вручную не нужно."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "В одной границе Suspense два компонента читают разные промисы: первый выполнится через 1 с, второй — через 3 с. Что видно на экране?",
+        "code": "<Suspense fallback={<Spinner />}>\n  <Profile userPromise={userPromise} />\n  <Posts postsPromise={postsPromise} />\n</Suspense>",
+        "options": [
+          "Через 1 с Profile, а на месте Posts всё ещё Spinner",
+          "Через 1 с Profile и пустое место вместо Posts",
+          "Spinner 1 секунду, затем ошибка в Error Boundary",
+          "Spinner все 3 секунды, затем оба компонента сразу"
+        ],
+        "answer": 3,
+        "explanation": "Граница Suspense показывает fallback, пока приостановлен хотя бы один компонент внутри неё. Чтобы Profile появился раньше, Posts оборачивают в собственную границу."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Кнопка отправки находится прямо в компоненте с формой. Как заблокировать её на время action без отдельного компонента?",
+        "code": "function Feedback() {\n  const [state, formAction, isPending] = useActionState(send, null)\n  return (\n    <form action={formAction}>\n      <textarea name=\"text\" />\n      <button disabled={/* ? */}>Отправить</button>\n    </form>\n  )\n}",
+        "options": [
+          "Вызвать useFormStatus в Feedback и взять pending",
+          "Проверять state === null, пока нет ответа",
+          "Взять isPending из useActionState",
+          "Взять isPending из нового useTransition в Feedback"
+        ],
+        "answer": 2,
+        "explanation": "useActionState сам возвращает isPending, и его можно использовать в том же компоненте. useFormStatus здесь вернёт pending: false, потому что Feedback рендерит форму, а не находится внутри неё."
+      }
+    ]
+  ]
+}

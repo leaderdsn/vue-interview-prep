@@ -16,7 +16,7 @@
           "Массивы и объекты"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "free",
         "taskCount": 0
       },
@@ -31,7 +31,7 @@
           "Современный JS: модули, коллекции, генераторы"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "paid",
         "taskCount": 0
       },
@@ -46,7 +46,7 @@
           "Производительность JS и main thread"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "paid",
         "taskCount": 0
       }
@@ -69,7 +69,7 @@
           "Функции и enum"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "free",
         "taskCount": 0
       },
@@ -84,7 +84,7 @@
           "TypeScript во Vue 3"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "paid",
         "taskCount": 0
       },
@@ -99,7 +99,7 @@
           "Конфигурация и типизация на уровне проекта"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "paid",
         "taskCount": 0
       }
@@ -122,7 +122,7 @@
           "watch и жизненный цикл"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "free",
         "taskCount": 0
       },
@@ -137,7 +137,7 @@
           "Pinia и Vue Router"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "paid",
         "taskCount": 0
       },
@@ -152,7 +152,7 @@
           "SSR, Nuxt и глобальные механизмы"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "paid",
         "taskCount": 0
       }

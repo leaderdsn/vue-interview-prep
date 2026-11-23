@@ -1,1 +1,840 @@
-{"id":"vue-senior","trackId":"vue","level":"senior","topics":[{"title":"Как устроена реактивность","html":"\n<p>На senior-собеседовании просят объяснить реактивность Vue изнутри: что происходит между <code>count.value++</code> и обновлением текста на экране. Это не академический интерес: понимая механизм, вы объясняете баги с потерей реактивности, лишними перерисовками и «почему DOM ещё старый».</p>\n<h3>Proxy, track и trigger</h3>\n<p>В основе лежит идея подписки. Есть <b>эффекты</b> — функции, которые читают реактивные данные: render-функция компонента, computed, watch. Есть <b>реактивные объекты</b>. Когда эффект читает поле объекта, Vue записывает связь «этот эффект зависит от этого поля» — это <code>track</code>. Когда поле меняется, Vue находит все эффекты, которые от него зависят, и запускает их — это <code>trigger</code>.</p>\n<p>Перехват чтения и записи делается через <code>Proxy</code> (для reactive) и через getter/setter класса RefImpl (для ref). Во Vue 2 использовался <code>Object.defineProperty</code>, который нужно было заранее навесить на каждое существующее свойство. Поэтому Vue 2 не видел добавление новых свойств и запись по индексу массива, и нужен был <code>Vue.set</code>. Proxy перехватывает любые операции, включая новые ключи, <code>delete</code>, <code>in</code>, перебор ключей и методы Map и Set.</p>\n<div class=\"code-label\">упрощённая модель</div><pre class=\"code\"><span class=\"c\">// упрощённая модель того, как устроен @vue/reactivity</span>\nlet activeEffect: (() =&gt; void) | null = null\nconst targetMap = new WeakMap&lt;object, Map&lt;PropertyKey, Set&lt;() =&gt; void&gt;&gt;&gt;()\n\nfunction track(target: object, key: PropertyKey) {\n  if (!activeEffect) return\n  let deps = targetMap.get(target)\n  if (!deps) targetMap.set(target, (deps = new Map()))\n  let dep = deps.get(key)\n  if (!dep) deps.set(key, (dep = new Set()))\n  dep.add(activeEffect) <span class=\"c\">// запомнили: этот эффект читал target[key]</span>\n}\n\nfunction trigger(target: object, key: PropertyKey) {\n  targetMap.get(target)?.get(key)?.forEach((fn) =&gt; fn())\n}\n\nfunction reactive&lt;T extends object&gt;(obj: T): T {\n  return new Proxy(obj, {\n    get(t, k, r) { track(t, k); return Reflect.get(t, k, r) },\n    set(t, k, v, r) {\n      const ok = Reflect.set(t, k, v, r)\n      trigger(t, k)\n      return ok\n    },\n  })\n}\n\nfunction effect(fn: () =&gt; void) {\n  activeEffect = fn\n  fn() <span class=\"c\">// при первом запуске собираются зависимости</span>\n  activeEffect = null\n}</pre>\n<p>Разберём модель. <code>targetMap</code> — WeakMap: объект → Map: ключ → Set эффектов. WeakMap нужен, чтобы при удалении объекта его зависимости тоже собрал сборщик мусора. <code>effect</code> ставит себя активным и выполняет функцию; все чтения внутри вызовут <code>track</code> и запишут этот эффект в нужные множества. Запись вызывает <code>trigger</code>, который перезапускает эффекты.</p>\n<p>Реальный Vue сложнее. Proxy для вложенных объектов создаётся лениво — только при чтении вложенного объекта, а не при вызове reactive. Зависимости пересобираются при каждом запуске эффекта, чтобы после <code>v-if</code> не оставались подписки на ветку, которая больше не рендерится. В Vue 3.5 система зависимостей переписана: вместо Set используются двусвязные списки и версионирование, что снизило потребление памяти примерно на 56% и ускорило операции с большими глубоко реактивными массивами.</p>\n<h3>Планировщик и батчинг: почему DOM обновляется асинхронно</h3>\n<p>Если бы каждый <code>trigger</code> сразу перерисовывал компонент, три изменения подряд дали бы три рендера, а изменение двадцати полей формы — двадцать. Поэтому эффект рендера компонента запускается не напрямую, а через <b>планировщик</b> (scheduler).</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Запись</b><span>count.value++</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>trigger</b><span>найти эффекты</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>queueJob</b><span>в очередь, дубли отсекаются</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Микротаска</b><span>Promise.resolve().then(flush)</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>flushJobs</b><span>pre-watch → рендер → post</span></div></div><figcaption>Путь от изменения данных до обновления DOM</figcaption></figure>\n<pre class=\"code\">import { ref, nextTick } from 'vue'\n\nconst count = ref(0)\n\nfunction onClick() {\n  count.value++\n  count.value++\n  count.value++\n  <span class=\"c\">// рендер ещё не случился: изменения лишь поставили задачу в очередь</span>\n  console.log(el.value?.textContent) <span class=\"c\">// старое значение</span>\n\n  nextTick(() =&gt; {\n    <span class=\"c\">// очередь выполнена в микротаске, компонент перерисован один раз</span>\n    console.log(el.value?.textContent) <span class=\"c\">// '3'</span>\n  })\n}\n\n<span class=\"c\">// computed — ленивый эффект с флагом \"грязный\"</span>\nconst total = computed(() =&gt; {\n  console.log('считаю')\n  return items.value.reduce((s, i) =&gt; s + i.price, 0)\n})\nitems.value.push(newItem) <span class=\"c\">// ничего не считается</span>\ntotal.value <span class=\"c\">// 'считаю' — пересчёт только при чтении</span>\ntotal.value <span class=\"c\">// из кэша</span></pre>\n<p>При изменении данных задача рендера компонента кладётся в очередь. Если она там уже есть, повторно не добавляется. Очистка очереди планируется как микротаска, поэтому весь синхронный код обработчика успевает отработать, и компонент перерисуется один раз с итоговым состоянием. Задачи сортируются по id компонента, чтобы родитель обновлялся раньше детей: иначе ребёнок мог бы отрисоваться с устаревшими props и сразу ещё раз.</p>\n<p>Поэтому сразу после изменения данных DOM ещё старый. <code>nextTick</code> возвращает промис, который выполнится после очистки текущей очереди. Здесь же объясняется опция <code>flush</code> у watch: <code>'pre'</code> — колбэк в очереди до рендера, <code>'post'</code> — после, <code>'sync'</code> — в обход планировщика.</p>\n<h3>computed как ленивый эффект</h3>\n<p>computed — тоже эффект, но особый. Когда его зависимости меняются, он не пересчитывается, а лишь помечается «грязным» (dirty) и оповещает своих подписчиков. Пересчёт происходит при следующем чтении <code>.value</code>. Если computed никто не читает (например, он используется только в скрытой через <code>v-if</code> ветке), вычисления не будет вовсе.</p>\n<p>С Vue 3.4 computed ещё и сравнивает новый результат со старым: если значение не изменилось (например, <code>items.length &gt; 0</code> осталось true), подписчики не перезапускаются. Раньше любое изменение зависимости тянуло перерисовку. Это важная оптимизация для цепочек computed.</p>\n<div class=\"note warn\">Ловушка: computed, который возвращает новый массив или объект (<code>filter</code>, <code>map</code>), всегда даёт новую ссылку, поэтому сравнение не спасает. Если такой computed передан в тяжёлый дочерний компонент, тот будет обновляться при каждом пересчёте.</div>\n<h3>Что ещё изменилось в Vue 3.5</h3>\n<p>Кроме переписанной системы зависимостей: реактивная деструктуризация props стала стабильной, появились <code>useTemplateRef</code>, <code>useId</code> (стабильные id для SSR), <code>onWatcherCleanup</code>, опция <code>deep</code> с числом, ленивая гидратация асинхронных компонентов и <code>Teleport</code> с <code>defer</code>. Эти детали хорошо показывают, что вы следите за развитием фреймворка.</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Реактивность Vue — это подписки: reactive оборачивает объект в Proxy, при чтении в эффекте вызывается track и связь сохраняется в WeakMap, при записи trigger находит зависимые эффекты. Эффект рендера не запускается сразу, а ставится в очередь планировщика, дубли отсекаются, и очередь выполняется в микротаске, поэтому несколько изменений дают один рендер, а DOM виден после nextTick. computed — ленивый эффект: помечается грязным и пересчитывается при чтении, а с 3.4 не оповещает, если результат не изменился.»</div>"},{"title":"Компилятор и Virtual DOM","html":"\n<p>Шаблон Vue — не HTML, который браузер читает напрямую. Это исходный код для компилятора, который превращает его в render-функцию. Render-функция возвращает дерево виртуальных узлов (vnode), а рантайм сравнивает новое дерево со старым и вносит в реальный DOM минимальные изменения. Senior-разработчик должен понимать этот конвейер и то, чем Vue отличается от «наивного» Virtual DOM.</p>\n<h3>Render-функции и Virtual DOM</h3>\n<p>Vnode — обычный JavaScript-объект с описанием элемента: тип, props, дети, key. Создавать и сравнивать такие объекты намного дешевле, чем трогать DOM. Render-функцию можно написать и руками через функцию <code>h</code> (hyperscript) или JSX.</p>\n<div class=\"code-label\">Panel.ts</div><pre class=\"code\">import { h, ref, defineComponent } from 'vue'\n\n<span class=\"c\">// то, во что превращается шаблон, можно написать руками</span>\nexport default defineComponent({\n  props: { level: { type: Number, required: true } },\n  setup(props, { slots }) {\n    const open = ref(true)\n    <span class=\"c\">// setup возвращает render-функцию</span>\n    return () =&gt;\n      h('section', { class: 'panel' }, [\n        h(`h${props.level}`, { onClick: () =&gt; (open.value = !open.value) }, slots.title?.()),\n        open.value ? h('div', { class: 'body' }, slots.default?.()) : null,\n      ])\n  },\n})\n\n<span class=\"c\">// JSX/TSX даёт тот же результат с синтаксисом, похожим на HTML</span>\n<span class=\"c\">// return () =&gt; &lt;section class=\"panel\"&gt;{open.value &amp;&amp; slots.default?.()}&lt;/section&gt;</span></pre>\n<p>Зачем писать render-функции, если есть шаблоны? Когда структура слишком динамическая: тег заголовка зависит от prop, разметка генерируется из конфигурации, библиотека компонентов программно оборачивает слоты. В остальных случаях шаблон лучше, и не только из-за читаемости: компилятор шаблона знает о разметке больше, чем рантайм знает о рукописной render-функции, и использует это для оптимизаций.</p>\n<h3>Что делает компилятор: patch flags, hoisting, block tree</h3>\n<p>Классический Virtual DOM при каждом обновлении сравнивает два дерева целиком: каждый узел, каждый атрибут. Даже если в карточке задачи меняется только название, проверяются и статический заголовок, и все классы. Vue 3 называет свой подход «compiler-informed Virtual DOM»: компилятор анализирует шаблон и оставляет рантайму подсказки.</p>\n<div class=\"code-label\">результат компиляции</div><pre class=\"code\"><span class=\"c\">// шаблон:</span>\n<span class=\"c\">// &lt;div class=\"card\"&gt;</span>\n<span class=\"c\">//   &lt;h3&gt;Задача&lt;/h3&gt;</span>\n<span class=\"c\">//   &lt;p :class=\"status\"&gt;{{ title }}&lt;/p&gt;</span>\n<span class=\"c\">// &lt;/div&gt;</span>\n\n<span class=\"c\">// упрощённый результат компиляции (Vue 3.5, production)</span>\nconst _hoisted_1 = { class: 'card' }\nconst _hoisted_2 = /*#__PURE__*/ _createElementVNode('h3', null, 'Задача', -1 /* CACHED */)\n\nfunction render(_ctx) {\n  return (_openBlock(), _createElementBlock('div', _hoisted_1, [\n    _hoisted_2, <span class=\"c\">// статика создана один раз и не сравнивается</span>\n    _createElementVNode('p', {\n      class: _normalizeClass(_ctx.status),\n    }, _toDisplayString(_ctx.title), 3 /* TEXT, CLASS */),\n  ]))\n}\n<span class=\"c\">// patch flag 3 = TEXT | CLASS: при обновлении сравниваются</span>\n<span class=\"c\">// только текст и класс этого p, остальное пропускается</span></pre>\n<div class=\"boxes\"><div class=\"box good\"><b>Кэширование статики</b><span>Узлы без динамики (h3 «Задача», объект { class: \"card\" }) создаются один раз вне render-функции и при патче не сравниваются.</span></div><div class=\"box good\"><b>Patch flags</b><span>Число-битовая маска на vnode: TEXT, CLASS, STYLE, PROPS и т. д. Рантайм проверяет только отмеченное. Для p с флагом 3 сравниваются текст и класс.</span></div><div class=\"box good\"><b>Block tree</b><span>Блок (openBlock/createElementBlock) собирает плоский массив только динамических потомков. При обновлении обходится этот массив, а не всё дерево.</span></div></div>\n<p>Блоки появляются на границах, где структура может меняться: корень шаблона, <code>v-if</code>, <code>v-for</code>. Внутри блока структура стабильна, поэтому достаточно пройти по плоскому списку динамических узлов. В итоге стоимость обновления зависит от количества динамических мест, а не от размера шаблона. Посмотреть результат компиляции любого шаблона можно в Vue SFC Playground на вкладке JS.</p>\n<h3>Алгоритм diff списков и key</h3>\n<p>Самое интересное происходит при сравнении списков детей. Для детей с ключами Vue 3 применяет алгоритм в несколько шагов:</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Начало</b><span>совпадающие key слева</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Конец</b><span>совпадающие key справа</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Добавить/удалить</b><span>если остаток только с одной стороны</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Середина</b><span>Map key → индекс</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>LIS</b><span>наибольшая возрастающая подпоследовательность</span></div></div></figure>\n<p>Сначала пропускаются одинаковые элементы в начале и в конце — это покрывает частые случаи «добавили в конец» и «удалили из начала». Оставшуюся середину Vue раскладывает по Map из ключей, находит, какие старые элементы есть в новом списке и на каких позициях. Затем вычисляет наибольшую возрастающую подпоследовательность (LIS) — элементы, которые уже стоят в правильном порядке относительно друг друга и которые не нужно двигать. Перемещаются только остальные. Это минимизирует дорогие операции <code>insertBefore</code>.</p>\n<p><b>Почему index как key опасен.</b> С ключом-индексом при вставке в начало каждый элемент получает ключ своего соседа. Vue считает, что все элементы остались на месте, и переписывает содержимое каждого. Это не только медленно, но и неправильно: DOM-состояние (значение в input, фокус, позиция скролла) и локальное состояние дочерних компонентов (развёрнуто/свёрнуто, режим редактирования) остаются у позиции и «переезжают» к другим данным. Анимации <code>TransitionGroup</code> тоже ломаются. Индекс допустим только для статического списка, который не переставляют и не фильтруют, и без состояния в строках.</p>\n<div class=\"note warn\">Без key Vue использует стратегию «патч на месте» по позициям — то же поведение, что и с индексом. Ключ — ещё и способ принудительно пересоздать компонент: смена <code>:key</code> уничтожает старый экземпляр и создаёт новый.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Шаблон компилируется в render-функцию, которая возвращает vnode, а рантайм сравнивает деревья и патчит DOM. Vue использует знания компилятора: статика кэшируется, на динамические узлы ставятся patch flags, а block tree собирает плоский список динамических потомков, поэтому стоимость обновления зависит от количества динамики, а не от размера шаблона. При diff списков Vue сопоставляет элементы по key и минимизирует перемещения через наибольшую возрастающую подпоследовательность; с key-индексом состояние строк привязывается к позиции, а не к данным.»</div>"},{"title":"Производительность больших приложений","html":"\n<p>Vue быстр по умолчанию, и большинство приложений не нуждаются в ручной оптимизации. Проблемы начинаются в «тяжёлых» экранах: таблица на десятки тысяч строк, дашборд с десятками графиков, дерево проекта с тысячами узлов. Senior должен уметь найти узкое место измерением, а не догадкой, и знать, какие инструменты чем платят. Метрики загрузки страницы (LCP, INP) и сетевые оптимизации — это тема трека про браузер; здесь фокус на рантайме Vue.</p>\n<h3>Сначала измерить</h3>\n<p>Оптимизация без профилирования часто ускоряет не то. Порядок действий: воспроизвести медленный сценарий, записать его во вкладке Performance браузера и в Vue Devtools, найти, что занимает время.</p>\n<p>Vue Devtools показывает на вкладке Timeline события компонентов и время рендера каждого, а инспектор компонентов подсвечивает обновления. Так видно, что, например, при вводе одного символа в поиск перерисовываются все 500 карточек. Опция <code>app.config.performance = true</code> в режиме разработки добавляет метки init, render и patch каждого компонента во вкладку Performance браузера.</p>\n<div class=\"table-wrap\"><table><thead><tr><th>Симптом</th><th>Вероятная причина</th><th>Что делать</th></tr></thead><tbody><tr><td>Долгая начальная загрузка экрана</td><td>много DOM-узлов, большой бандл</td><td>виртуализация, lazy-loading, разбиение на чанки</td></tr><tr><td>Тормозит ввод в форме</td><td>лишние перерисовки больших соседей</td><td>вынести тяжёлое в отдельный компонент, стабилизировать props</td></tr><tr><td>Медленно приходят и встают данные</td><td>глубокий Proxy на огромном массиве</td><td>shallowRef, Object.freeze, markRaw</td></tr><tr><td>Клик по строке тормозит всю таблицу</td><td>каждое изменение сравнивает все строки</td><td>v-memo, вынос строки в компонент</td></tr></tbody></table></div>\n<h3>Виртуализация длинных списков</h3>\n<p>Браузеру тяжело держать десятки тысяч DOM-узлов: растут память, время раскладки и отрисовки. Виртуализация (windowing) рендерит только строки, которые видны в окне прокрутки, плюс небольшой запас. Контейнер имеет полную высоту, чтобы скроллбар выглядел правильно, а видимый кусок сдвигается по мере прокрутки.</p>\n<div class=\"code-label\">VirtualTaskList.vue</div><pre class=\"code\">&lt;!-- 50 000 строк: в DOM только видимые ~30 --&gt;\n&lt;script setup lang=\"ts\"&gt;\nimport { shallowRef, onMounted } from 'vue'\nimport { useVirtualList } from '@vueuse/core'\n\nconst rows = shallowRef&lt;Row[]&gt;([])\nonMounted(async () =&gt; {\n  rows.value = Object.freeze(await api.getRows()) <span class=\"c\">// без глубокого Proxy</span>\n})\n\nconst { list, containerProps, wrapperProps } = useVirtualList(rows, {\n  itemHeight: 36, <span class=\"c\">// фиксированная высота строки</span>\n  overscan: 10,   <span class=\"c\">// запас строк сверху и снизу</span>\n})\n&lt;/script&gt;\n\n&lt;template&gt;\n  &lt;div v-bind=\"containerProps\" style=\"height: 600px; overflow: auto\"&gt;\n    &lt;div v-bind=\"wrapperProps\"&gt;\n      &lt;TaskRow v-for=\"{ data, index } in list\" :key=\"data.id\" :row=\"data\" :index=\"index\" /&gt;\n    &lt;/div&gt;\n  &lt;/div&gt;\n&lt;/template&gt;</pre>\n<p>Здесь <code>useVirtualList</code> из VueUse вычисляет, какие строки видны, по фиксированной высоте 36px. <code>overscan</code> добавляет запас, чтобы при быстрой прокрутке не мелькали пустые места. Данные лежат в <code>shallowRef</code> и заморожены: 50 000 объектов только отображаются, и обёртка каждого в Proxy не нужна.</p>\n<p>У виртуализации есть цена. Строки с разной высотой требуют измерения (библиотеки вроде TanStack Virtual это умеют, но сложнее). Поиск по странице через Ctrl+F не находит невидимые строки. Скринридеры видят только часть списка. Состояние строк, ушедших из окна, теряется, поэтому его храните в данных, а не в компоненте строки. Для 200 строк виртуализация не нужна — это лишняя сложность. Готовые таблицы (AG Grid и подобные) виртуализируют сами.</p>\n<h3>Как уменьшить работу при обновлениях</h3>\n<p>Компонент во Vue — граница обновления: при изменении данных перерисовывается только компонент, который их читал. Поэтому первый инструмент — правильное разбиение. Если в большом компоненте списка есть поле поиска, каждое нажатие перерисует весь список. Вынесите поле в отдельный компонент, и обновляться будет только оно. Второе — <b>стабильные props</b>: если передавать в строку <code>:active=\"activeId\"</code>, при смене activeId обновятся все строки, а <code>:active=\"row.id === activeId\"</code> изменится только у двух.</p>\n<pre class=\"code\">&lt;template&gt;\n  &lt;!-- v-once: отрисовать один раз и больше не обновлять --&gt;\n  &lt;footer v-once&gt;Версия {{ appVersion }}&lt;/footer&gt;\n\n  &lt;!-- v-memo: строка перерисуется, только если изменилось\n       выделение именно этой строки или её версия --&gt;\n  &lt;div\n    v-for=\"row in rows\"\n    :key=\"row.id\"\n    v-memo=\"[row.id === selectedId, row.version]\"\n    :class=\"{ selected: row.id === selectedId }\"\n    @click=\"selectedId = row.id\"\n  &gt;\n    &lt;TaskCell :row=\"row\" /&gt;\n  &lt;/div&gt;\n&lt;/template&gt;\n\n&lt;!-- без v-memo смена selectedId заставляет сравнить vnode всех строк;\n     с v-memo сравниваются только две: старая и новая выделенная --&gt;</pre>\n<p><code>v-once</code> рендерит элемент один раз и навсегда исключает его из обновлений. Подходит для действительно статичного контента с интерполяцией. <code>v-memo</code> принимает массив значений: если все они равны прошлым, Vue пропускает всё поддерево, не создавая и не сравнивая vnode. В таблице на тысячи строк при смене выделения без v-memo сравниваются все строки, с v-memo — только две. Но v-memo — точечный инструмент: если забыть зависимость в массиве, строка перестанет обновляться, и это трудный баг.</p>\n<p>Для больших данных: <code>shallowRef</code> вместо <code>ref</code>, <code>Object.freeze</code> для данных только для чтения, <code>markRaw</code> для экземпляров библиотек. Вычисления, которые зависят от больших коллекций, делайте через computed, а не в шаблоне и не в методах.</p>\n<h3>Размер бандла и ленивая загрузка</h3>\n<p>Вторая сторона производительности — сколько кода нужно загрузить и выполнить до первого экрана. Все маршруты грузятся через динамический <code>import</code>, тяжёлые компоненты, которые нужны не сразу (редактор, диаграмма, экспорт в Excel), — через <code>defineAsyncComponent</code>. Сторонние библиотеки импортируются точечно, чтобы tree-shaking убрал лишнее: из lodash-es берут конкретные функции, из библиотеки иконок — конкретные иконки. Посмотреть, что занимает место, позволяет rollup-plugin-visualizer; настройка разбиения на чанки — тема трека про инструменты.</p>\n<div class=\"note warn\">Ловушка: <code>KeepAlive</code> без <code>max</code> на большом количестве вкладок держит в памяти все экземпляры со всеми данными. Кэш ускоряет переключение, но может стать утечкой памяти.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Сначала я измеряю: Performance в браузере и Timeline в Vue Devtools, чтобы понять, что именно тормозит. Для тысяч строк использую виртуализацию, данные только для отображения кладу в shallowRef и замораживаю. Перерисовки уменьшаю разбиением на компоненты и стабильными props, а в горячих местах — v-memo с аккуратным списком зависимостей. Страницы и тяжёлые компоненты загружаю лениво, чтобы первый экран не ждал лишний код.»</div>"},{"title":"SSR, Nuxt и глобальные механизмы","html":"\n<p>Последняя тема senior-уровня объединяет то, что работает на уровне всего приложения: серверный рендеринг и Nuxt, плагины, кастомные директивы, обработку ошибок и переход с Vue 2. Это вопросы о решениях, которые принимают один раз, и о цене этих решений.</p>\n<h3>SSR, гидратация и её ошибки</h3>\n<p>В обычном SPA сервер отдаёт пустой <code>&lt;div id=\"app\"&gt;</code> и бандл, и пользователь видит контент только после загрузки и выполнения JavaScript. При серверном рендеринге (SSR) Vue выполняется на сервере, генерирует готовый HTML и отправляет его. Пользователь и поисковый робот сразу видят контент. Затем в браузере загружается тот же код, и Vue <b>гидратирует</b> страницу: не создаёт DOM заново, а проходит по существующим узлам, привязывает к ним обработчики событий и реактивное состояние.</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Запрос</b><span>GET /projects/7</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Сервер</b><span>setup, загрузка данных, renderToString</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>HTML + состояние</b><span>контент виден сразу</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Бандл</b><span>загрузка JS</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Гидратация</b><span>обработчики на готовый DOM</span></div></div></figure>\n<p>Для гидратации клиент должен получить ту же разметку, что и сервер. Если они различаются, возникает <b>hydration mismatch</b>: Vue выдаёт предупреждение и исправляет несовпадающие узлы, что стоит времени и может дать мерцание. Типичные причины: дата и время (<code>new Date()</code> на сервере и клиенте разные), <code>Math.random()</code> и случайные id (для id используйте <code>useId</code> из Vue 3.5), проверки <code>typeof window</code> в шаблоне, данные из localStorage, некорректный HTML (например, <code>&lt;div&gt;</code> внутри <code>&lt;p&gt;</code>, который браузер «исправит» сам).</p>\n<div class=\"code-label\">SSR-безопасный компонент</div><pre class=\"code\">&lt;script setup lang=\"ts\"&gt;\nimport { ref, onMounted } from 'vue'\n\n<span class=\"c\">// плохо: на сервере нет window, рендер упадёт</span>\n<span class=\"c\">// const width = ref(window.innerWidth)</span>\n\n<span class=\"c\">// плохо: разные значения на сервере и клиенте → hydration mismatch</span>\n<span class=\"c\">// const now = new Date().toLocaleTimeString()</span>\n\n<span class=\"c\">// хорошо: браузерное — только в onMounted (на сервере не вызывается)</span>\nconst width = ref(0)\nconst now = ref('')\nonMounted(() =&gt; {\n  width.value = window.innerWidth\n  now.value = new Date().toLocaleTimeString()\n})\n\n<span class=\"c\">// плохо: состояние в модуле общее для всех запросов сервера</span>\n<span class=\"c\">// export const currentUser = ref(null)</span>\n<span class=\"c\">// хорошо: useState в Nuxt или Pinia, создаётся на каждый запрос</span>\nconst user = useState('user', () =&gt; null)\n&lt;/script&gt;\n\n&lt;template&gt;\n  &lt;ClientOnly&gt;&lt;MapWidget /&gt;&lt;/ClientOnly&gt;\n&lt;/template&gt;</pre>\n<p>Правила SSR-безопасного кода. На сервере нет <code>window</code>, <code>document</code>, <code>localStorage</code>, поэтому работа с ними — только в <code>onMounted</code>, который на сервере не вызывается, или в <code>&lt;ClientOnly&gt;</code>. На сервере не нужны таймеры и подписки в setup: компонент не будет размонтирован, и они утекут. Самая опасная ошибка — <b>состояние на уровне модуля</b>: модуль на сервере загружается один раз и живёт между запросами, поэтому <code>export const currentUser = ref(null)</code> станет общим для всех пользователей. Состояние должно создаваться на каждый запрос: в Nuxt — <code>useState</code> или Pinia.</p>\n<h3>Nuxt</h3>\n<p>Nuxt — фреймворк поверх Vue, который берёт на себя SSR и всё, что вокруг: маршрутизацию по файлам в папке <code>pages</code>, автоимпорт компонентов и composables, загрузку данных (<code>useFetch</code>, <code>useAsyncData</code>), которые выполняются на сервере и передают результат клиенту без повторного запроса, серверные API-маршруты (Nitro), разные режимы рендеринга для разных маршрутов: SSR, статическая генерация (SSG), только клиент, ISR. Выбор режима — архитектурное решение: SSR нужен для SEO и быстрого первого экрана публичных страниц, а для внутренней админки за логином обычно достаточно SPA, и сервер рендеринга — лишняя инфраструктура.</p>\n<h3>Плагины, директивы и обработка ошибок</h3>\n<p><b>Плагин</b> — объект с методом <code>install(app, options)</code> или просто функция. Через <code>app.use</code> он может зарегистрировать глобальные компоненты и директивы, сделать <code>app.provide</code> для зависимостей (API-клиент, i18n), добавить <code>app.config.globalProperties</code>. Так устроены Pinia, Vue Router, библиотеки компонентов.</p>\n<p><b>Кастомная директива</b> нужна для низкоуровневой работы с DOM-элементом, которую неудобно делать через компонент: фокус, клик вне элемента, ленивая загрузка изображений, подсказки. Директива — объект с хуками, похожими на хуки компонента: <code>mounted</code>, <code>updated</code>, <code>unmounted</code>. В script setup любая переменная с именем <code>vИмя</code> автоматически становится директивой.</p>\n<div class=\"code-label\">directives</div><pre class=\"code\"><span class=\"c\">// directives/vFocus.ts + vClickOutside.ts</span>\nimport type { Directive } from 'vue'\n\nexport const vFocus: Directive&lt;HTMLElement&gt; = {\n  mounted: (el) =&gt; el.focus(),\n}\n\ntype Handler = (e: MouseEvent) =&gt; void\nconst handlers = new WeakMap&lt;HTMLElement, (e: MouseEvent) =&gt; void&gt;()\n\nexport const vClickOutside: Directive&lt;HTMLElement, Handler&gt; = {\n  mounted(el, binding) {\n    const listener = (e: MouseEvent) =&gt; {\n      if (!el.contains(e.target as Node)) binding.value(e)\n    }\n    handlers.set(el, listener)\n    document.addEventListener('click', listener)\n  },\n  unmounted(el) {\n    document.removeEventListener('click', handlers.get(el)!)\n    handlers.delete(el)\n  },\n}\n\n<span class=\"c\">// main.ts: app.directive('click-outside', vClickOutside)</span>\n<span class=\"c\">// &lt;div v-click-outside=\"close\"&gt;...&lt;/div&gt;</span></pre>\n<p>Обратите внимание на <code>unmounted</code>: слушатель на document нужно снять, иначе он останется после удаления элемента. Хранить его удобно в WeakMap по элементу. Если логика не привязана к конкретному DOM-элементу, лучше composable, а не директива.</p>\n<p><b>Обработка ошибок</b> строится слоями. <code>onErrorCaptured</code> в компоненте ловит ошибки потомков (в рендере, setup, хуках, обработчиках, watch). Если вернуть <code>false</code>, ошибка дальше не пойдёт — так делают компонент-границу, которая показывает запасной интерфейс для части страницы. <code>app.config.errorHandler</code> — глобальный обработчик для всего, что не поймали ниже: туда подключают отправку в Sentry. Аргумент <code>info</code> сообщает, где произошла ошибка.</p>\n<div class=\"code-label\">main.ts</div><pre class=\"code\"><span class=\"c\">// main.ts</span>\nconst app = createApp(App)\n\n<span class=\"c\">// глобальный обработчик: последняя линия обороны</span>\napp.config.errorHandler = (err, instance, info) =&gt; {\n  <span class=\"c\">// info: где упало, например 'render function' или 'setup function'</span>\n  Sentry.captureException(err, { extra: { info, component: instance?.$options.name } })\n}\n\n<span class=\"c\">// плагин: функция install(app, options)</span>\nexport const apiPlugin = {\n  install(app: App, options: { baseURL: string }) {\n    const api = createApi(options.baseURL)\n    app.provide(ApiKey, api)\n  },\n}\napp.use(apiPlugin, { baseURL: '/api' })\n\n<span class=\"c\">// ErrorBoundary.vue: ловит ошибки потомков</span>\nconst error = ref&lt;Error | null&gt;(null)\nonErrorCaptured((err) =&gt; {\n  error.value = err\n  return false <span class=\"c\">// не передавать ошибку выше</span>\n})\n<span class=\"c\">// &lt;template&gt;&lt;Fallback v-if=\"error\" /&gt;&lt;slot v-else /&gt;&lt;/template&gt;</span></pre>\n<div class=\"note warn\">Ловушка: errorHandler ловит ошибки, которые проходят через Vue. Ошибка в промисе, запущенном в обработчике без await и без возврата, или в setTimeout, до него не дойдёт. Для таких случаев нужен ещё глобальный unhandledrejection.</div>\n<h3>Options API, Composition API и миграция с Vue 2</h3>\n<p>Options API (data, methods, computed, watch в объекте компонента) во Vue 3 остаётся полностью поддерживаемым. Composition API лучше в больших компонентах: логика группируется по смыслу, а не по типу опции, её можно вынести в composable, TypeScript выводит типы без дополнительных обёрток. Для нового кода стандартом стал script setup.</p>\n<p>Vue 2 перестал поддерживаться в конце 2023 года, и миграция — частая задача. Основные изменения: реактивность на Proxy (больше не нужен <code>Vue.set</code>), <code>createApp</code> вместо глобального <code>new Vue</code>, v-model на компонентах использует <code>modelValue</code>, удалены фильтры, <code>$listeners</code> влиты в <code>$attrs</code>, удалены <code>$on</code>/<code>$off</code> (вместо event bus — mitt или стор), <code>beforeDestroy</code> стал <code>onBeforeUnmount</code>, Vuex заменяется Pinia. Безопасный путь для большого проекта — сначала обновиться до Vue 2.7 (в нём уже есть Composition API и script setup), переписать критичные места, затем перейти на Vue 3 через сборку совместимости <code>@vue/compat</code>, исправляя предупреждения, и параллельно заменить несовместимые библиотеки. Переписывать всё на Composition API сразу не обязательно.</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«При SSR сервер отдаёт готовый HTML, а клиент гидратирует его, привязывая обработчики к существующему DOM. Чтобы не было mismatch, браузерные API и всё недетерминированное я выношу в onMounted или ClientOnly, а состояние создаю на каждый запрос через useState или Pinia, а не на уровне модуля. SSR выбираю, когда нужны SEO и быстрый первый экран; для админки чаще хватает SPA. Ошибки ловлю слоями: onErrorCaptured в компонентах-границах и app.config.errorHandler с отправкой в мониторинг.»</div>"}],"quiz":[{"topic":0,"type":"theory","question":"Что происходит в get-ловушке Proxy, который создаёт reactive?","options":["track: текущий эффект запоминается как зависимость этого объекта и ключа","trigger: запускаются все эффекты, подписанные на этот объект","значение копируется во внутренний кэш, чтобы следующее чтение было быстрым","компонент сразу перерисовывается, чтобы показать актуальное значение"],"answer":0,"explanation":"Чтение регистрирует зависимость (track), запись в set-ловушке запускает зависимые эффекты (trigger). Вложенные объекты оборачиваются в Proxy лениво, при чтении."},{"topic":0,"type":"practice","question":"Сколько раз перерисуется компонент и что выведет первый console.log?","code":"count.value++\ncount.value++\ncount.value++\nconsole.log(el.value.textContent) // было \"0\"","options":["один раз, выведет \"0\"","три раза, выведет \"3\"","один раз, выведет \"3\"","ни разу, выведет \"0\""],"answer":0,"explanation":"Изменения ставят задачу рендера в очередь планировщика, дубли отсекаются, очередь выполняется в микротаске. Увидеть обновлённый DOM можно после await nextTick()."},{"topic":0,"type":"theory","question":"Почему computed называют ленивым?","options":["он помечается грязным и пересчитывается только при следующем чтении","он вычисляется в requestIdleCallback, когда браузер простаивает между кадрами","он пересчитывается не сразу, а раз в кадр через requestAnimationFrame","он не реагирует на изменения, пока компонент не будет перемонтирован"],"answer":0,"explanation":"При изменении зависимостей computed только помечается грязным. Если значение никто не читает, вычисление не выполняется вовсе. С Vue 3.4 computed также не оповещает подписчиков, если новый результат равен старому."},{"topic":1,"type":"theory","question":"Что такое patch flag в скомпилированном шаблоне?","options":["метка на vnode о том, какие части динамические (текст, class, props), чтобы сравнивать только их","флаг, что компонент нужно полностью пересоздать при следующем обновлении","номер версии шаблона, по которому рантайм сверяет кэш скомпилированного кода","флаг для SSR, отмечающий узлы, которые нужно отрендерить на сервере"],"answer":0,"explanation":"Компилятор знает шаблон заранее, поэтому даёт рантайму подсказки. Вместе с block tree это позволяет пропускать статику и не обходить всё дерево."},{"topic":1,"type":"practice","question":"Список с key = index, в строках компонент с локальным состоянием «развёрнуто». В начало добавили элемент. Что увидит пользователь?","code":"<TaskItem v-for=\"(t, i) in tasks\" :key=\"i\" :task=\"t\" />","options":["«развёрнуто» останется на тех же позициях и окажется у других задач","всё сохранится у своих задач, Vue сопоставит компоненты по props","все строки свернутся, потому что Vue пересоздаст все компоненты списка","Vue выдаст ошибку о дублирующихся ключах"],"answer":0,"explanation":"При key = index новый элемент получает key 0, и экземпляр компонента бывшей первой задачи переиспользуется для новой. Props обновятся, а локальное состояние останется."},{"topic":1,"type":"theory","question":"Что компилятор Vue делает со статической разметкой шаблона?","options":["выносит её за пределы render-функции: создаёт один раз и не сравнивает","удаляет её из виртуального DOM, оставляя только в исходном HTML страницы","превращает её в веб-компоненты, которые браузер рендерит без участия Vue","ничего, статика сравнивается при каждом патче так же, как и динамические узлы"],"answer":0,"explanation":"Это hoisting/кэширование: статические vnode создаются один раз и переиспользуются; при патче они не сравниваются. Это одна из причин, почему шаблоны во Vue часто быстрее рукописных render-функций."},{"topic":2,"type":"theory","question":"Когда оправдана виртуализация списка?","options":["когда строк тысячи и DOM-узлов слишком много: рендерятся только видимые","всегда, для любого списка: виртуализация бесплатна и только ускоряет рендер","когда в списке меньше 50 элементов и каждый из них тяжёлый","только при SSR, чтобы сервер не отдавал слишком большой HTML"],"answer":0,"explanation":"Цена — фиксированная или измеряемая высота строк, сложнее поиск по странице и доступность. Для 100 строк это лишняя сложность."},{"topic":2,"type":"practice","question":"Таблица 5000 строк, при клике меняется selectedId, и каждый клик заметно тормозит. Что поможет точечно?","code":"<Row v-for=\"r in rows\" :key=\"r.id\" :row=\"r\"\n  :selected=\"r.id === selectedId\" />","options":["v-memo=\"[r.id === selectedId]\" на строке, чтобы пропускать неизменившиеся строки","добавить v-once на строку, чтобы она рендерилась только один раз","заменить key на индекс, чтобы Vue переиспользовал строки","обернуть таблицу в KeepAlive, чтобы она не перерисовывалась целиком"],"answer":0,"explanation":"v-memo пропускает обновление поддерева, если значения в массиве не изменились. При смене выделения изменятся только две строки. v-once заморозил бы выделение навсегда."},{"topic":2,"type":"practice","question":"С сервера приходит 20 000 объектов только для отображения. Как хранить их с минимальными накладными расходами?","code":"const rows = ref<Row[]>([])\nrows.value = await api.getRows()","options":["shallowRef и при необходимости Object.freeze: без глубокого Proxy","reactive вместо ref: он создаёт Proxy только для массива, а не для элементов","положить в Pinia: стор хранит состояние без реактивных обёрток и Proxy","computed вокруг ref, чтобы кэшировать данные и не создавать Proxy"],"answer":0,"explanation":"ref делает данные глубоко реактивными, Proxy создаются при доступе к каждому объекту. Для данных только для чтения достаточно реагировать на замену массива: shallowRef не оборачивает элементы в Proxy."},{"topic":3,"type":"theory","question":"Что такое гидратация?","options":["клиентский Vue «оживляет» серверный HTML: привязывает обработчики к готовым DOM-узлам","сжатие HTML на сервере перед отправкой, чтобы страница быстрее загрузилась","загрузка данных перед рендером, чтобы сервер отдал страницу уже с заполненным состоянием","кэширование отрендеренных страниц в CDN, чтобы не рендерить их повторно"],"answer":0,"explanation":"Клиент привязывает обработчики и состояние к существующим DOM-узлам, не создавая их заново. Для этого клиентский рендер должен дать ту же разметку, что и сервер. Иначе будет hydration mismatch: предупреждение и пересоздание узлов."},{"topic":3,"type":"practice","question":"В Nuxt-приложении при SSR пользователь иногда видит имя другого пользователя. В чём вероятная причина?","code":"// composables/user.ts\nexport const currentUser = ref<User | null>(null)","options":["модульное состояние общее для всех запросов сервера; нужно useState или Pinia","ref нельзя использовать в Nuxt, вместо него нужен reactive","нужно обернуть вывод имени в ClientOnly, чтобы он рендерился только в браузере","браузер берёт страницу из кэша, где сохранено имя предыдущего пользователя"],"answer":0,"explanation":"Модуль на сервере загружается один раз и живёт между запросами, поэтому данные одного пользователя утекают к другому. useState и Pinia создают состояние на каждый запрос."},{"topic":3,"type":"theory","question":"Что вернуть из onErrorCaptured, чтобы ошибка не пошла выше к app.config.errorHandler?","options":["false","true","null","сам объект ошибки"],"answer":0,"explanation":"Так строят компонент-границу ошибок: показываем запасной интерфейс для части страницы, а остальное приложение работает."}]}
+{
+  "id": "vue-senior",
+  "trackId": "vue",
+  "level": "senior",
+  "topics": [
+    {
+      "title": "Как устроена реактивность",
+      "html": "\n<p>На senior-собеседовании просят объяснить реактивность Vue изнутри: что происходит между <code>count.value++</code> и обновлением текста на экране. Это не академический интерес: понимая механизм, вы объясняете баги с потерей реактивности, лишними перерисовками и «почему DOM ещё старый».</p>\n<h3>Proxy, track и trigger</h3>\n<p>В основе лежит идея подписки. Есть <b>эффекты</b> — функции, которые читают реактивные данные: render-функция компонента, computed, watch. Есть <b>реактивные объекты</b>. Когда эффект читает поле объекта, Vue записывает связь «этот эффект зависит от этого поля» — это <code>track</code>. Когда поле меняется, Vue находит все эффекты, которые от него зависят, и запускает их — это <code>trigger</code>.</p>\n<p>Перехват чтения и записи делается через <code>Proxy</code> (для reactive) и через getter/setter класса RefImpl (для ref). Во Vue 2 использовался <code>Object.defineProperty</code>, который нужно было заранее навесить на каждое существующее свойство. Поэтому Vue 2 не видел добавление новых свойств и запись по индексу массива, и нужен был <code>Vue.set</code>. Proxy перехватывает любые операции, включая новые ключи, <code>delete</code>, <code>in</code>, перебор ключей и методы Map и Set.</p>\n<div class=\"code-label\">упрощённая модель</div><pre class=\"code\"><span class=\"c\">// упрощённая модель того, как устроен @vue/reactivity</span>\nlet activeEffect: (() =&gt; void) | null = null\nconst targetMap = new WeakMap&lt;object, Map&lt;PropertyKey, Set&lt;() =&gt; void&gt;&gt;&gt;()\n\nfunction track(target: object, key: PropertyKey) {\n  if (!activeEffect) return\n  let deps = targetMap.get(target)\n  if (!deps) targetMap.set(target, (deps = new Map()))\n  let dep = deps.get(key)\n  if (!dep) deps.set(key, (dep = new Set()))\n  dep.add(activeEffect) <span class=\"c\">// запомнили: этот эффект читал target[key]</span>\n}\n\nfunction trigger(target: object, key: PropertyKey) {\n  targetMap.get(target)?.get(key)?.forEach((fn) =&gt; fn())\n}\n\nfunction reactive&lt;T extends object&gt;(obj: T): T {\n  return new Proxy(obj, {\n    get(t, k, r) { track(t, k); return Reflect.get(t, k, r) },\n    set(t, k, v, r) {\n      const ok = Reflect.set(t, k, v, r)\n      trigger(t, k)\n      return ok\n    },\n  })\n}\n\nfunction effect(fn: () =&gt; void) {\n  activeEffect = fn\n  fn() <span class=\"c\">// при первом запуске собираются зависимости</span>\n  activeEffect = null\n}</pre>\n<p>Разберём модель. <code>targetMap</code> — WeakMap: объект → Map: ключ → Set эффектов. WeakMap нужен, чтобы при удалении объекта его зависимости тоже собрал сборщик мусора. <code>effect</code> ставит себя активным и выполняет функцию; все чтения внутри вызовут <code>track</code> и запишут этот эффект в нужные множества. Запись вызывает <code>trigger</code>, который перезапускает эффекты.</p>\n<p>Реальный Vue сложнее. Proxy для вложенных объектов создаётся лениво — только при чтении вложенного объекта, а не при вызове reactive. Зависимости пересобираются при каждом запуске эффекта, чтобы после <code>v-if</code> не оставались подписки на ветку, которая больше не рендерится. В Vue 3.5 система зависимостей переписана: вместо Set используются двусвязные списки и версионирование, что снизило потребление памяти примерно на 56% и ускорило операции с большими глубоко реактивными массивами.</p>\n<h3>Планировщик и батчинг: почему DOM обновляется асинхронно</h3>\n<p>Если бы каждый <code>trigger</code> сразу перерисовывал компонент, три изменения подряд дали бы три рендера, а изменение двадцати полей формы — двадцать. Поэтому эффект рендера компонента запускается не напрямую, а через <b>планировщик</b> (scheduler).</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Запись</b><span>count.value++</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>trigger</b><span>найти эффекты</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>queueJob</b><span>в очередь, дубли отсекаются</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Микротаска</b><span>Promise.resolve().then(flush)</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>flushJobs</b><span>pre-watch → рендер → post</span></div></div><figcaption>Путь от изменения данных до обновления DOM</figcaption></figure>\n<pre class=\"code\">import { ref, nextTick } from 'vue'\n\nconst count = ref(0)\n\nfunction onClick() {\n  count.value++\n  count.value++\n  count.value++\n  <span class=\"c\">// рендер ещё не случился: изменения лишь поставили задачу в очередь</span>\n  console.log(el.value?.textContent) <span class=\"c\">// старое значение</span>\n\n  nextTick(() =&gt; {\n    <span class=\"c\">// очередь выполнена в микротаске, компонент перерисован один раз</span>\n    console.log(el.value?.textContent) <span class=\"c\">// '3'</span>\n  })\n}\n\n<span class=\"c\">// computed — ленивый эффект с флагом \"грязный\"</span>\nconst total = computed(() =&gt; {\n  console.log('считаю')\n  return items.value.reduce((s, i) =&gt; s + i.price, 0)\n})\nitems.value.push(newItem) <span class=\"c\">// ничего не считается</span>\ntotal.value <span class=\"c\">// 'считаю' — пересчёт только при чтении</span>\ntotal.value <span class=\"c\">// из кэша</span></pre>\n<p>При изменении данных задача рендера компонента кладётся в очередь. Если она там уже есть, повторно не добавляется. Очистка очереди планируется как микротаска, поэтому весь синхронный код обработчика успевает отработать, и компонент перерисуется один раз с итоговым состоянием. Задачи сортируются по id компонента, чтобы родитель обновлялся раньше детей: иначе ребёнок мог бы отрисоваться с устаревшими props и сразу ещё раз.</p>\n<p>Поэтому сразу после изменения данных DOM ещё старый. <code>nextTick</code> возвращает промис, который выполнится после очистки текущей очереди. Здесь же объясняется опция <code>flush</code> у watch: <code>'pre'</code> — колбэк в очереди до рендера, <code>'post'</code> — после, <code>'sync'</code> — в обход планировщика.</p>\n<h3>computed как ленивый эффект</h3>\n<p>computed — тоже эффект, но особый. Когда его зависимости меняются, он не пересчитывается, а лишь помечается «грязным» (dirty) и оповещает своих подписчиков. Пересчёт происходит при следующем чтении <code>.value</code>. Если computed никто не читает (например, он используется только в скрытой через <code>v-if</code> ветке), вычисления не будет вовсе.</p>\n<p>С Vue 3.4 computed ещё и сравнивает новый результат со старым: если значение не изменилось (например, <code>items.length &gt; 0</code> осталось true), подписчики не перезапускаются. Раньше любое изменение зависимости тянуло перерисовку. Это важная оптимизация для цепочек computed.</p>\n<div class=\"note warn\">Ловушка: computed, который возвращает новый массив или объект (<code>filter</code>, <code>map</code>), всегда даёт новую ссылку, поэтому сравнение не спасает. Если такой computed передан в тяжёлый дочерний компонент, тот будет обновляться при каждом пересчёте.</div>\n<h3>Что ещё изменилось в Vue 3.5</h3>\n<p>Кроме переписанной системы зависимостей: реактивная деструктуризация props стала стабильной, появились <code>useTemplateRef</code>, <code>useId</code> (стабильные id для SSR), <code>onWatcherCleanup</code>, опция <code>deep</code> с числом, ленивая гидратация асинхронных компонентов и <code>Teleport</code> с <code>defer</code>. Эти детали хорошо показывают, что вы следите за развитием фреймворка.</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Реактивность Vue — это подписки: reactive оборачивает объект в Proxy, при чтении в эффекте вызывается track и связь сохраняется в WeakMap, при записи trigger находит зависимые эффекты. Эффект рендера не запускается сразу, а ставится в очередь планировщика, дубли отсекаются, и очередь выполняется в микротаске, поэтому несколько изменений дают один рендер, а DOM виден после nextTick. computed — ленивый эффект: помечается грязным и пересчитывается при чтении, а с 3.4 не оповещает, если результат не изменился.»</div>"
+    },
+    {
+      "title": "Компилятор и Virtual DOM",
+      "html": "\n<p>Шаблон Vue — не HTML, который браузер читает напрямую. Это исходный код для компилятора, который превращает его в render-функцию. Render-функция возвращает дерево виртуальных узлов (vnode), а рантайм сравнивает новое дерево со старым и вносит в реальный DOM минимальные изменения. Senior-разработчик должен понимать этот конвейер и то, чем Vue отличается от «наивного» Virtual DOM.</p>\n<h3>Render-функции и Virtual DOM</h3>\n<p>Vnode — обычный JavaScript-объект с описанием элемента: тип, props, дети, key. Создавать и сравнивать такие объекты намного дешевле, чем трогать DOM. Render-функцию можно написать и руками через функцию <code>h</code> (hyperscript) или JSX.</p>\n<div class=\"code-label\">Panel.ts</div><pre class=\"code\">import { h, ref, defineComponent } from 'vue'\n\n<span class=\"c\">// то, во что превращается шаблон, можно написать руками</span>\nexport default defineComponent({\n  props: { level: { type: Number, required: true } },\n  setup(props, { slots }) {\n    const open = ref(true)\n    <span class=\"c\">// setup возвращает render-функцию</span>\n    return () =&gt;\n      h('section', { class: 'panel' }, [\n        h(`h${props.level}`, { onClick: () =&gt; (open.value = !open.value) }, slots.title?.()),\n        open.value ? h('div', { class: 'body' }, slots.default?.()) : null,\n      ])\n  },\n})\n\n<span class=\"c\">// JSX/TSX даёт тот же результат с синтаксисом, похожим на HTML</span>\n<span class=\"c\">// return () =&gt; &lt;section class=\"panel\"&gt;{open.value &amp;&amp; slots.default?.()}&lt;/section&gt;</span></pre>\n<p>Зачем писать render-функции, если есть шаблоны? Когда структура слишком динамическая: тег заголовка зависит от prop, разметка генерируется из конфигурации, библиотека компонентов программно оборачивает слоты. В остальных случаях шаблон лучше, и не только из-за читаемости: компилятор шаблона знает о разметке больше, чем рантайм знает о рукописной render-функции, и использует это для оптимизаций.</p>\n<h3>Что делает компилятор: patch flags, hoisting, block tree</h3>\n<p>Классический Virtual DOM при каждом обновлении сравнивает два дерева целиком: каждый узел, каждый атрибут. Даже если в карточке задачи меняется только название, проверяются и статический заголовок, и все классы. Vue 3 называет свой подход «compiler-informed Virtual DOM»: компилятор анализирует шаблон и оставляет рантайму подсказки.</p>\n<div class=\"code-label\">результат компиляции</div><pre class=\"code\"><span class=\"c\">// шаблон:</span>\n<span class=\"c\">// &lt;div class=\"card\"&gt;</span>\n<span class=\"c\">//   &lt;h3&gt;Задача&lt;/h3&gt;</span>\n<span class=\"c\">//   &lt;p :class=\"status\"&gt;{{ title }}&lt;/p&gt;</span>\n<span class=\"c\">// &lt;/div&gt;</span>\n\n<span class=\"c\">// упрощённый результат компиляции (Vue 3.5, production)</span>\nconst _hoisted_1 = { class: 'card' }\nconst _hoisted_2 = /*#__PURE__*/ _createElementVNode('h3', null, 'Задача', -1 /* CACHED */)\n\nfunction render(_ctx) {\n  return (_openBlock(), _createElementBlock('div', _hoisted_1, [\n    _hoisted_2, <span class=\"c\">// статика создана один раз и не сравнивается</span>\n    _createElementVNode('p', {\n      class: _normalizeClass(_ctx.status),\n    }, _toDisplayString(_ctx.title), 3 /* TEXT, CLASS */),\n  ]))\n}\n<span class=\"c\">// patch flag 3 = TEXT | CLASS: при обновлении сравниваются</span>\n<span class=\"c\">// только текст и класс этого p, остальное пропускается</span></pre>\n<div class=\"boxes\"><div class=\"box good\"><b>Кэширование статики</b><span>Узлы без динамики (h3 «Задача», объект { class: \"card\" }) создаются один раз вне render-функции и при патче не сравниваются.</span></div><div class=\"box good\"><b>Patch flags</b><span>Число-битовая маска на vnode: TEXT, CLASS, STYLE, PROPS и т. д. Рантайм проверяет только отмеченное. Для p с флагом 3 сравниваются текст и класс.</span></div><div class=\"box good\"><b>Block tree</b><span>Блок (openBlock/createElementBlock) собирает плоский массив только динамических потомков. При обновлении обходится этот массив, а не всё дерево.</span></div></div>\n<p>Блоки появляются на границах, где структура может меняться: корень шаблона, <code>v-if</code>, <code>v-for</code>. Внутри блока структура стабильна, поэтому достаточно пройти по плоскому списку динамических узлов. В итоге стоимость обновления зависит от количества динамических мест, а не от размера шаблона. Посмотреть результат компиляции любого шаблона можно в Vue SFC Playground на вкладке JS.</p>\n<h3>Алгоритм diff списков и key</h3>\n<p>Самое интересное происходит при сравнении списков детей. Для детей с ключами Vue 3 применяет алгоритм в несколько шагов:</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Начало</b><span>совпадающие key слева</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Конец</b><span>совпадающие key справа</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Добавить/удалить</b><span>если остаток только с одной стороны</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Середина</b><span>Map key → индекс</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>LIS</b><span>наибольшая возрастающая подпоследовательность</span></div></div></figure>\n<p>Сначала пропускаются одинаковые элементы в начале и в конце — это покрывает частые случаи «добавили в конец» и «удалили из начала». Оставшуюся середину Vue раскладывает по Map из ключей, находит, какие старые элементы есть в новом списке и на каких позициях. Затем вычисляет наибольшую возрастающую подпоследовательность (LIS) — элементы, которые уже стоят в правильном порядке относительно друг друга и которые не нужно двигать. Перемещаются только остальные. Это минимизирует дорогие операции <code>insertBefore</code>.</p>\n<p><b>Почему index как key опасен.</b> С ключом-индексом при вставке в начало каждый элемент получает ключ своего соседа. Vue считает, что все элементы остались на месте, и переписывает содержимое каждого. Это не только медленно, но и неправильно: DOM-состояние (значение в input, фокус, позиция скролла) и локальное состояние дочерних компонентов (развёрнуто/свёрнуто, режим редактирования) остаются у позиции и «переезжают» к другим данным. Анимации <code>TransitionGroup</code> тоже ломаются. Индекс допустим только для статического списка, который не переставляют и не фильтруют, и без состояния в строках.</p>\n<div class=\"note warn\">Без key Vue использует стратегию «патч на месте» по позициям — то же поведение, что и с индексом. Ключ — ещё и способ принудительно пересоздать компонент: смена <code>:key</code> уничтожает старый экземпляр и создаёт новый.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Шаблон компилируется в render-функцию, которая возвращает vnode, а рантайм сравнивает деревья и патчит DOM. Vue использует знания компилятора: статика кэшируется, на динамические узлы ставятся patch flags, а block tree собирает плоский список динамических потомков, поэтому стоимость обновления зависит от количества динамики, а не от размера шаблона. При diff списков Vue сопоставляет элементы по key и минимизирует перемещения через наибольшую возрастающую подпоследовательность; с key-индексом состояние строк привязывается к позиции, а не к данным.»</div>"
+    },
+    {
+      "title": "Производительность больших приложений",
+      "html": "\n<p>Vue быстр по умолчанию, и большинство приложений не нуждаются в ручной оптимизации. Проблемы начинаются в «тяжёлых» экранах: таблица на десятки тысяч строк, дашборд с десятками графиков, дерево проекта с тысячами узлов. Senior должен уметь найти узкое место измерением, а не догадкой, и знать, какие инструменты чем платят. Метрики загрузки страницы (LCP, INP) и сетевые оптимизации — это тема трека про браузер; здесь фокус на рантайме Vue.</p>\n<h3>Сначала измерить</h3>\n<p>Оптимизация без профилирования часто ускоряет не то. Порядок действий: воспроизвести медленный сценарий, записать его во вкладке Performance браузера и в Vue Devtools, найти, что занимает время.</p>\n<p>Vue Devtools показывает на вкладке Timeline события компонентов и время рендера каждого, а инспектор компонентов подсвечивает обновления. Так видно, что, например, при вводе одного символа в поиск перерисовываются все 500 карточек. Опция <code>app.config.performance = true</code> в режиме разработки добавляет метки init, render и patch каждого компонента во вкладку Performance браузера.</p>\n<div class=\"table-wrap\"><table><thead><tr><th>Симптом</th><th>Вероятная причина</th><th>Что делать</th></tr></thead><tbody><tr><td>Долгая начальная загрузка экрана</td><td>много DOM-узлов, большой бандл</td><td>виртуализация, lazy-loading, разбиение на чанки</td></tr><tr><td>Тормозит ввод в форме</td><td>лишние перерисовки больших соседей</td><td>вынести тяжёлое в отдельный компонент, стабилизировать props</td></tr><tr><td>Медленно приходят и встают данные</td><td>глубокий Proxy на огромном массиве</td><td>shallowRef, Object.freeze, markRaw</td></tr><tr><td>Клик по строке тормозит всю таблицу</td><td>каждое изменение сравнивает все строки</td><td>v-memo, вынос строки в компонент</td></tr></tbody></table></div>\n<h3>Виртуализация длинных списков</h3>\n<p>Браузеру тяжело держать десятки тысяч DOM-узлов: растут память, время раскладки и отрисовки. Виртуализация (windowing) рендерит только строки, которые видны в окне прокрутки, плюс небольшой запас. Контейнер имеет полную высоту, чтобы скроллбар выглядел правильно, а видимый кусок сдвигается по мере прокрутки.</p>\n<div class=\"code-label\">VirtualTaskList.vue</div><pre class=\"code\">&lt;!-- 50 000 строк: в DOM только видимые ~30 --&gt;\n&lt;script setup lang=\"ts\"&gt;\nimport { shallowRef, onMounted } from 'vue'\nimport { useVirtualList } from '@vueuse/core'\n\nconst rows = shallowRef&lt;Row[]&gt;([])\nonMounted(async () =&gt; {\n  rows.value = Object.freeze(await api.getRows()) <span class=\"c\">// без глубокого Proxy</span>\n})\n\nconst { list, containerProps, wrapperProps } = useVirtualList(rows, {\n  itemHeight: 36, <span class=\"c\">// фиксированная высота строки</span>\n  overscan: 10,   <span class=\"c\">// запас строк сверху и снизу</span>\n})\n&lt;/script&gt;\n\n&lt;template&gt;\n  &lt;div v-bind=\"containerProps\" style=\"height: 600px; overflow: auto\"&gt;\n    &lt;div v-bind=\"wrapperProps\"&gt;\n      &lt;TaskRow v-for=\"{ data, index } in list\" :key=\"data.id\" :row=\"data\" :index=\"index\" /&gt;\n    &lt;/div&gt;\n  &lt;/div&gt;\n&lt;/template&gt;</pre>\n<p>Здесь <code>useVirtualList</code> из VueUse вычисляет, какие строки видны, по фиксированной высоте 36px. <code>overscan</code> добавляет запас, чтобы при быстрой прокрутке не мелькали пустые места. Данные лежат в <code>shallowRef</code> и заморожены: 50 000 объектов только отображаются, и обёртка каждого в Proxy не нужна.</p>\n<p>У виртуализации есть цена. Строки с разной высотой требуют измерения (библиотеки вроде TanStack Virtual это умеют, но сложнее). Поиск по странице через Ctrl+F не находит невидимые строки. Скринридеры видят только часть списка. Состояние строк, ушедших из окна, теряется, поэтому его храните в данных, а не в компоненте строки. Для 200 строк виртуализация не нужна — это лишняя сложность. Готовые таблицы (AG Grid и подобные) виртуализируют сами.</p>\n<h3>Как уменьшить работу при обновлениях</h3>\n<p>Компонент во Vue — граница обновления: при изменении данных перерисовывается только компонент, который их читал. Поэтому первый инструмент — правильное разбиение. Если в большом компоненте списка есть поле поиска, каждое нажатие перерисует весь список. Вынесите поле в отдельный компонент, и обновляться будет только оно. Второе — <b>стабильные props</b>: если передавать в строку <code>:active=\"activeId\"</code>, при смене activeId обновятся все строки, а <code>:active=\"row.id === activeId\"</code> изменится только у двух.</p>\n<pre class=\"code\">&lt;template&gt;\n  &lt;!-- v-once: отрисовать один раз и больше не обновлять --&gt;\n  &lt;footer v-once&gt;Версия {{ appVersion }}&lt;/footer&gt;\n\n  &lt;!-- v-memo: строка перерисуется, только если изменилось\n       выделение именно этой строки или её версия --&gt;\n  &lt;div\n    v-for=\"row in rows\"\n    :key=\"row.id\"\n    v-memo=\"[row.id === selectedId, row.version]\"\n    :class=\"{ selected: row.id === selectedId }\"\n    @click=\"selectedId = row.id\"\n  &gt;\n    &lt;TaskCell :row=\"row\" /&gt;\n  &lt;/div&gt;\n&lt;/template&gt;\n\n&lt;!-- без v-memo смена selectedId заставляет сравнить vnode всех строк;\n     с v-memo сравниваются только две: старая и новая выделенная --&gt;</pre>\n<p><code>v-once</code> рендерит элемент один раз и навсегда исключает его из обновлений. Подходит для действительно статичного контента с интерполяцией. <code>v-memo</code> принимает массив значений: если все они равны прошлым, Vue пропускает всё поддерево, не создавая и не сравнивая vnode. В таблице на тысячи строк при смене выделения без v-memo сравниваются все строки, с v-memo — только две. Но v-memo — точечный инструмент: если забыть зависимость в массиве, строка перестанет обновляться, и это трудный баг.</p>\n<p>Для больших данных: <code>shallowRef</code> вместо <code>ref</code>, <code>Object.freeze</code> для данных только для чтения, <code>markRaw</code> для экземпляров библиотек. Вычисления, которые зависят от больших коллекций, делайте через computed, а не в шаблоне и не в методах.</p>\n<h3>Размер бандла и ленивая загрузка</h3>\n<p>Вторая сторона производительности — сколько кода нужно загрузить и выполнить до первого экрана. Все маршруты грузятся через динамический <code>import</code>, тяжёлые компоненты, которые нужны не сразу (редактор, диаграмма, экспорт в Excel), — через <code>defineAsyncComponent</code>. Сторонние библиотеки импортируются точечно, чтобы tree-shaking убрал лишнее: из lodash-es берут конкретные функции, из библиотеки иконок — конкретные иконки. Посмотреть, что занимает место, позволяет rollup-plugin-visualizer; настройка разбиения на чанки — тема трека про инструменты.</p>\n<div class=\"note warn\">Ловушка: <code>KeepAlive</code> без <code>max</code> на большом количестве вкладок держит в памяти все экземпляры со всеми данными. Кэш ускоряет переключение, но может стать утечкой памяти.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Сначала я измеряю: Performance в браузере и Timeline в Vue Devtools, чтобы понять, что именно тормозит. Для тысяч строк использую виртуализацию, данные только для отображения кладу в shallowRef и замораживаю. Перерисовки уменьшаю разбиением на компоненты и стабильными props, а в горячих местах — v-memo с аккуратным списком зависимостей. Страницы и тяжёлые компоненты загружаю лениво, чтобы первый экран не ждал лишний код.»</div>"
+    },
+    {
+      "title": "SSR, Nuxt и глобальные механизмы",
+      "html": "\n<p>Последняя тема senior-уровня объединяет то, что работает на уровне всего приложения: серверный рендеринг и Nuxt, плагины, кастомные директивы, обработку ошибок и переход с Vue 2. Это вопросы о решениях, которые принимают один раз, и о цене этих решений.</p>\n<h3>SSR, гидратация и её ошибки</h3>\n<p>В обычном SPA сервер отдаёт пустой <code>&lt;div id=\"app\"&gt;</code> и бандл, и пользователь видит контент только после загрузки и выполнения JavaScript. При серверном рендеринге (SSR) Vue выполняется на сервере, генерирует готовый HTML и отправляет его. Пользователь и поисковый робот сразу видят контент. Затем в браузере загружается тот же код, и Vue <b>гидратирует</b> страницу: не создаёт DOM заново, а проходит по существующим узлам, привязывает к ним обработчики событий и реактивное состояние.</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Запрос</b><span>GET /projects/7</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Сервер</b><span>setup, загрузка данных, renderToString</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>HTML + состояние</b><span>контент виден сразу</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Бандл</b><span>загрузка JS</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Гидратация</b><span>обработчики на готовый DOM</span></div></div></figure>\n<p>Для гидратации клиент должен получить ту же разметку, что и сервер. Если они различаются, возникает <b>hydration mismatch</b>: Vue выдаёт предупреждение и исправляет несовпадающие узлы, что стоит времени и может дать мерцание. Типичные причины: дата и время (<code>new Date()</code> на сервере и клиенте разные), <code>Math.random()</code> и случайные id (для id используйте <code>useId</code> из Vue 3.5), проверки <code>typeof window</code> в шаблоне, данные из localStorage, некорректный HTML (например, <code>&lt;div&gt;</code> внутри <code>&lt;p&gt;</code>, который браузер «исправит» сам).</p>\n<div class=\"code-label\">SSR-безопасный компонент</div><pre class=\"code\">&lt;script setup lang=\"ts\"&gt;\nimport { ref, onMounted } from 'vue'\n\n<span class=\"c\">// плохо: на сервере нет window, рендер упадёт</span>\n<span class=\"c\">// const width = ref(window.innerWidth)</span>\n\n<span class=\"c\">// плохо: разные значения на сервере и клиенте → hydration mismatch</span>\n<span class=\"c\">// const now = new Date().toLocaleTimeString()</span>\n\n<span class=\"c\">// хорошо: браузерное — только в onMounted (на сервере не вызывается)</span>\nconst width = ref(0)\nconst now = ref('')\nonMounted(() =&gt; {\n  width.value = window.innerWidth\n  now.value = new Date().toLocaleTimeString()\n})\n\n<span class=\"c\">// плохо: состояние в модуле общее для всех запросов сервера</span>\n<span class=\"c\">// export const currentUser = ref(null)</span>\n<span class=\"c\">// хорошо: useState в Nuxt или Pinia, создаётся на каждый запрос</span>\nconst user = useState('user', () =&gt; null)\n&lt;/script&gt;\n\n&lt;template&gt;\n  &lt;ClientOnly&gt;&lt;MapWidget /&gt;&lt;/ClientOnly&gt;\n&lt;/template&gt;</pre>\n<p>Правила SSR-безопасного кода. На сервере нет <code>window</code>, <code>document</code>, <code>localStorage</code>, поэтому работа с ними — только в <code>onMounted</code>, который на сервере не вызывается, или в <code>&lt;ClientOnly&gt;</code>. На сервере не нужны таймеры и подписки в setup: компонент не будет размонтирован, и они утекут. Самая опасная ошибка — <b>состояние на уровне модуля</b>: модуль на сервере загружается один раз и живёт между запросами, поэтому <code>export const currentUser = ref(null)</code> станет общим для всех пользователей. Состояние должно создаваться на каждый запрос: в Nuxt — <code>useState</code> или Pinia.</p>\n<h3>Nuxt</h3>\n<p>Nuxt — фреймворк поверх Vue, который берёт на себя SSR и всё, что вокруг: маршрутизацию по файлам в папке <code>pages</code>, автоимпорт компонентов и composables, загрузку данных (<code>useFetch</code>, <code>useAsyncData</code>), которые выполняются на сервере и передают результат клиенту без повторного запроса, серверные API-маршруты (Nitro), разные режимы рендеринга для разных маршрутов: SSR, статическая генерация (SSG), только клиент, ISR. Выбор режима — архитектурное решение: SSR нужен для SEO и быстрого первого экрана публичных страниц, а для внутренней админки за логином обычно достаточно SPA, и сервер рендеринга — лишняя инфраструктура.</p>\n<h3>Плагины, директивы и обработка ошибок</h3>\n<p><b>Плагин</b> — объект с методом <code>install(app, options)</code> или просто функция. Через <code>app.use</code> он может зарегистрировать глобальные компоненты и директивы, сделать <code>app.provide</code> для зависимостей (API-клиент, i18n), добавить <code>app.config.globalProperties</code>. Так устроены Pinia, Vue Router, библиотеки компонентов.</p>\n<p><b>Кастомная директива</b> нужна для низкоуровневой работы с DOM-элементом, которую неудобно делать через компонент: фокус, клик вне элемента, ленивая загрузка изображений, подсказки. Директива — объект с хуками, похожими на хуки компонента: <code>mounted</code>, <code>updated</code>, <code>unmounted</code>. В script setup любая переменная с именем <code>vИмя</code> автоматически становится директивой.</p>\n<div class=\"code-label\">directives</div><pre class=\"code\"><span class=\"c\">// directives/vFocus.ts + vClickOutside.ts</span>\nimport type { Directive } from 'vue'\n\nexport const vFocus: Directive&lt;HTMLElement&gt; = {\n  mounted: (el) =&gt; el.focus(),\n}\n\ntype Handler = (e: MouseEvent) =&gt; void\nconst handlers = new WeakMap&lt;HTMLElement, (e: MouseEvent) =&gt; void&gt;()\n\nexport const vClickOutside: Directive&lt;HTMLElement, Handler&gt; = {\n  mounted(el, binding) {\n    const listener = (e: MouseEvent) =&gt; {\n      if (!el.contains(e.target as Node)) binding.value(e)\n    }\n    handlers.set(el, listener)\n    document.addEventListener('click', listener)\n  },\n  unmounted(el) {\n    document.removeEventListener('click', handlers.get(el)!)\n    handlers.delete(el)\n  },\n}\n\n<span class=\"c\">// main.ts: app.directive('click-outside', vClickOutside)</span>\n<span class=\"c\">// &lt;div v-click-outside=\"close\"&gt;...&lt;/div&gt;</span></pre>\n<p>Обратите внимание на <code>unmounted</code>: слушатель на document нужно снять, иначе он останется после удаления элемента. Хранить его удобно в WeakMap по элементу. Если логика не привязана к конкретному DOM-элементу, лучше composable, а не директива.</p>\n<p><b>Обработка ошибок</b> строится слоями. <code>onErrorCaptured</code> в компоненте ловит ошибки потомков (в рендере, setup, хуках, обработчиках, watch). Если вернуть <code>false</code>, ошибка дальше не пойдёт — так делают компонент-границу, которая показывает запасной интерфейс для части страницы. <code>app.config.errorHandler</code> — глобальный обработчик для всего, что не поймали ниже: туда подключают отправку в Sentry. Аргумент <code>info</code> сообщает, где произошла ошибка.</p>\n<div class=\"code-label\">main.ts</div><pre class=\"code\"><span class=\"c\">// main.ts</span>\nconst app = createApp(App)\n\n<span class=\"c\">// глобальный обработчик: последняя линия обороны</span>\napp.config.errorHandler = (err, instance, info) =&gt; {\n  <span class=\"c\">// info: где упало, например 'render function' или 'setup function'</span>\n  Sentry.captureException(err, { extra: { info, component: instance?.$options.name } })\n}\n\n<span class=\"c\">// плагин: функция install(app, options)</span>\nexport const apiPlugin = {\n  install(app: App, options: { baseURL: string }) {\n    const api = createApi(options.baseURL)\n    app.provide(ApiKey, api)\n  },\n}\napp.use(apiPlugin, { baseURL: '/api' })\n\n<span class=\"c\">// ErrorBoundary.vue: ловит ошибки потомков</span>\nconst error = ref&lt;Error | null&gt;(null)\nonErrorCaptured((err) =&gt; {\n  error.value = err\n  return false <span class=\"c\">// не передавать ошибку выше</span>\n})\n<span class=\"c\">// &lt;template&gt;&lt;Fallback v-if=\"error\" /&gt;&lt;slot v-else /&gt;&lt;/template&gt;</span></pre>\n<div class=\"note warn\">Ловушка: errorHandler ловит ошибки, которые проходят через Vue. Ошибка в промисе, запущенном в обработчике без await и без возврата, или в setTimeout, до него не дойдёт. Для таких случаев нужен ещё глобальный unhandledrejection.</div>\n<h3>Options API, Composition API и миграция с Vue 2</h3>\n<p>Options API (data, methods, computed, watch в объекте компонента) во Vue 3 остаётся полностью поддерживаемым. Composition API лучше в больших компонентах: логика группируется по смыслу, а не по типу опции, её можно вынести в composable, TypeScript выводит типы без дополнительных обёрток. Для нового кода стандартом стал script setup.</p>\n<p>Vue 2 перестал поддерживаться в конце 2023 года, и миграция — частая задача. Основные изменения: реактивность на Proxy (больше не нужен <code>Vue.set</code>), <code>createApp</code> вместо глобального <code>new Vue</code>, v-model на компонентах использует <code>modelValue</code>, удалены фильтры, <code>$listeners</code> влиты в <code>$attrs</code>, удалены <code>$on</code>/<code>$off</code> (вместо event bus — mitt или стор), <code>beforeDestroy</code> стал <code>onBeforeUnmount</code>, Vuex заменяется Pinia. Безопасный путь для большого проекта — сначала обновиться до Vue 2.7 (в нём уже есть Composition API и script setup), переписать критичные места, затем перейти на Vue 3 через сборку совместимости <code>@vue/compat</code>, исправляя предупреждения, и параллельно заменить несовместимые библиотеки. Переписывать всё на Composition API сразу не обязательно.</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«При SSR сервер отдаёт готовый HTML, а клиент гидратирует его, привязывая обработчики к существующему DOM. Чтобы не было mismatch, браузерные API и всё недетерминированное я выношу в onMounted или ClientOnly, а состояние создаю на каждый запрос через useState или Pinia, а не на уровне модуля. SSR выбираю, когда нужны SEO и быстрый первый экран; для админки чаще хватает SPA. Ошибки ловлю слоями: onErrorCaptured в компонентах-границах и app.config.errorHandler с отправкой в мониторинг.»</div>"
+    }
+  ],
+  "quizVariants": [
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Что происходит в get-ловушке Proxy, который создаёт reactive?",
+        "options": [
+          "track: текущий эффект запоминается как зависимость этого объекта и ключа",
+          "trigger: запускаются все эффекты, подписанные на этот объект",
+          "значение копируется во внутренний кэш, чтобы следующее чтение было быстрым",
+          "компонент сразу перерисовывается, чтобы показать актуальное значение"
+        ],
+        "answer": 0,
+        "explanation": "Чтение регистрирует зависимость (track), запись в set-ловушке запускает зависимые эффекты (trigger). Вложенные объекты оборачиваются в Proxy лениво, при чтении."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Сколько раз перерисуется компонент и что выведет первый console.log?",
+        "code": "count.value++\ncount.value++\ncount.value++\nconsole.log(el.value.textContent) // было \"0\"",
+        "options": [
+          "один раз, выведет \"0\"",
+          "три раза, выведет \"3\"",
+          "один раз, выведет \"3\"",
+          "ни разу, выведет \"0\""
+        ],
+        "answer": 0,
+        "explanation": "Изменения ставят задачу рендера в очередь планировщика, дубли отсекаются, очередь выполняется в микротаске. Увидеть обновлённый DOM можно после await nextTick()."
+      },
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Почему computed называют ленивым?",
+        "options": [
+          "он помечается грязным и пересчитывается только при следующем чтении",
+          "он вычисляется в requestIdleCallback, когда браузер простаивает между кадрами",
+          "он пересчитывается не сразу, а раз в кадр через requestAnimationFrame",
+          "он не реагирует на изменения, пока компонент не будет перемонтирован"
+        ],
+        "answer": 0,
+        "explanation": "При изменении зависимостей computed только помечается грязным. Если значение никто не читает, вычисление не выполняется вовсе. С Vue 3.4 computed также не оповещает подписчиков, если новый результат равен старому."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что такое patch flag в скомпилированном шаблоне?",
+        "options": [
+          "метка на vnode о том, какие части динамические (текст, class, props), чтобы сравнивать только их",
+          "флаг, что компонент нужно полностью пересоздать при следующем обновлении",
+          "номер версии шаблона, по которому рантайм сверяет кэш скомпилированного кода",
+          "флаг для SSR, отмечающий узлы, которые нужно отрендерить на сервере"
+        ],
+        "answer": 0,
+        "explanation": "Компилятор знает шаблон заранее, поэтому даёт рантайму подсказки. Вместе с block tree это позволяет пропускать статику и не обходить всё дерево."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Список с key = index, в строках компонент с локальным состоянием «развёрнуто». В начало добавили элемент. Что увидит пользователь?",
+        "code": "<TaskItem v-for=\"(t, i) in tasks\" :key=\"i\" :task=\"t\" />",
+        "options": [
+          "«развёрнуто» останется на тех же позициях и окажется у других задач",
+          "всё сохранится у своих задач, Vue сопоставит компоненты по props",
+          "все строки свернутся, потому что Vue пересоздаст все компоненты списка",
+          "Vue выдаст ошибку о дублирующихся ключах"
+        ],
+        "answer": 0,
+        "explanation": "При key = index новый элемент получает key 0, и экземпляр компонента бывшей первой задачи переиспользуется для новой. Props обновятся, а локальное состояние останется."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что компилятор Vue делает со статической разметкой шаблона?",
+        "options": [
+          "выносит её за пределы render-функции: создаёт один раз и не сравнивает",
+          "удаляет её из виртуального DOM, оставляя только в исходном HTML страницы",
+          "превращает её в веб-компоненты, которые браузер рендерит без участия Vue",
+          "ничего, статика сравнивается при каждом патче так же, как и динамические узлы"
+        ],
+        "answer": 0,
+        "explanation": "Это hoisting/кэширование: статические vnode создаются один раз и переиспользуются; при патче они не сравниваются. Это одна из причин, почему шаблоны во Vue часто быстрее рукописных render-функций."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Когда оправдана виртуализация списка?",
+        "options": [
+          "когда строк тысячи и DOM-узлов слишком много: рендерятся только видимые",
+          "всегда, для любого списка: виртуализация бесплатна и только ускоряет рендер",
+          "когда в списке меньше 50 элементов и каждый из них тяжёлый",
+          "только при SSR, чтобы сервер не отдавал слишком большой HTML"
+        ],
+        "answer": 0,
+        "explanation": "Цена — фиксированная или измеряемая высота строк, сложнее поиск по странице и доступность. Для 100 строк это лишняя сложность."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Таблица 5000 строк, при клике меняется selectedId, и каждый клик заметно тормозит. Что поможет точечно?",
+        "code": "<Row v-for=\"r in rows\" :key=\"r.id\" :row=\"r\"\n  :selected=\"r.id === selectedId\" />",
+        "options": [
+          "v-memo=\"[r.id === selectedId]\" на строке, чтобы пропускать неизменившиеся строки",
+          "добавить v-once на строку, чтобы она рендерилась только один раз",
+          "заменить key на индекс, чтобы Vue переиспользовал строки",
+          "обернуть таблицу в KeepAlive, чтобы она не перерисовывалась целиком"
+        ],
+        "answer": 0,
+        "explanation": "v-memo пропускает обновление поддерева, если значения в массиве не изменились. При смене выделения изменятся только две строки. v-once заморозил бы выделение навсегда."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "С сервера приходит 20 000 объектов только для отображения. Как хранить их с минимальными накладными расходами?",
+        "code": "const rows = ref<Row[]>([])\nrows.value = await api.getRows()",
+        "options": [
+          "shallowRef и при необходимости Object.freeze: без глубокого Proxy",
+          "reactive вместо ref: он создаёт Proxy только для массива, а не для элементов",
+          "положить в Pinia: стор хранит состояние без реактивных обёрток и Proxy",
+          "computed вокруг ref, чтобы кэшировать данные и не создавать Proxy"
+        ],
+        "answer": 0,
+        "explanation": "ref делает данные глубоко реактивными, Proxy создаются при доступе к каждому объекту. Для данных только для чтения достаточно реагировать на замену массива: shallowRef не оборачивает элементы в Proxy."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что такое гидратация?",
+        "options": [
+          "клиентский Vue «оживляет» серверный HTML: привязывает обработчики к готовым DOM-узлам",
+          "сжатие HTML на сервере перед отправкой, чтобы страница быстрее загрузилась",
+          "загрузка данных перед рендером, чтобы сервер отдал страницу уже с заполненным состоянием",
+          "кэширование отрендеренных страниц в CDN, чтобы не рендерить их повторно"
+        ],
+        "answer": 0,
+        "explanation": "Клиент привязывает обработчики и состояние к существующим DOM-узлам, не создавая их заново. Для этого клиентский рендер должен дать ту же разметку, что и сервер. Иначе будет hydration mismatch: предупреждение и пересоздание узлов."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "В Nuxt-приложении при SSR пользователь иногда видит имя другого пользователя. В чём вероятная причина?",
+        "code": "// composables/user.ts\nexport const currentUser = ref<User | null>(null)",
+        "options": [
+          "модульное состояние общее для всех запросов сервера; нужно useState или Pinia",
+          "ref нельзя использовать в Nuxt, вместо него нужен reactive",
+          "нужно обернуть вывод имени в ClientOnly, чтобы он рендерился только в браузере",
+          "браузер берёт страницу из кэша, где сохранено имя предыдущего пользователя"
+        ],
+        "answer": 0,
+        "explanation": "Модуль на сервере загружается один раз и живёт между запросами, поэтому данные одного пользователя утекают к другому. useState и Pinia создают состояние на каждый запрос."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что вернуть из onErrorCaptured, чтобы ошибка не пошла выше к app.config.errorHandler?",
+        "options": [
+          "false",
+          "true",
+          "null",
+          "сам объект ошибки"
+        ],
+        "answer": 0,
+        "explanation": "Так строят компонент-границу ошибок: показываем запасной интерфейс для части страницы, а остальное приложение работает."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Зачем в системе реактивности зависимости хранятся в WeakMap с объектом в качестве ключа?",
+        "options": [
+          "чтобы перебор зависимостей шёл в порядке их добавления",
+          "чтобы зависимости объекта собирал сборщик мусора вместе с ним",
+          "потому что обычный Map не умеет хранить объекты в качестве ключей",
+          "чтобы доступ к зависимостям был быстрее, чем у обычного Map"
+        ],
+        "answer": 1,
+        "explanation": "WeakMap не удерживает ключ: когда на реактивный объект больше нет ссылок, его запись с зависимостями тоже собирается. Обычный Map тоже принимает объекты как ключи, но держал бы их в памяти вечно."
+      },
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Почему во Vue 2 для добавления нового свойства в реактивный объект нужен был Vue.set?",
+        "options": [
+          "Vue 2 не отслеживал вложенные объекты глубже первого уровня",
+          "Proxy во Vue 2 не перехватывал добавление новых ключей в объект и массив",
+          "defineProperty навешивался заранее только на уже существующие свойства",
+          "Vue.set запускал рендер синхронно, минуя очередь планировщика"
+        ],
+        "answer": 2,
+        "explanation": "Object.defineProperty работает с конкретным свойством, поэтому новые ключи и запись по индексу массива оставались незамеченными. Proxy во Vue 2 не использовался, а во Vue 3 он перехватывает и новые ключи."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Что и сколько раз выведет watch с настройками по умолчанию? Изначально count = 0.",
+        "code": "watch(count, (v, old) => console.log(old, '→', v))\n\ncount.value++\ncount.value++\ncount.value++",
+        "options": [
+          "один раз: 0 → 3",
+          "три раза: 0 → 1, 1 → 2, 2 → 3",
+          "один раз: 2 → 3",
+          "один раз: 0 → 1"
+        ],
+        "answer": 0,
+        "explanation": "По умолчанию flush: 'pre': колбэк ставится в очередь планировщика, дубли отсекаются, и он вызывается один раз с итоговым значением. Старое значение — то, что было при прошлом запуске, то есть 0."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что собирает блок (openBlock/createElementBlock) в скомпилированном шаблоне?",
+        "options": [
+          "все дочерние vnode в порядке появления, включая статические",
+          "список дочерних компонентов, которые нужно пересоздать при смене props",
+          "кэш готовой HTML-строки, которая вставляется через innerHTML",
+          "плоский массив только динамических потомков для обхода при обновлении"
+        ],
+        "answer": 3,
+        "explanation": "При обновлении рантайм обходит плоский список динамических узлов блока, а не всё дерево. Внутри блока структура стабильна, поэтому так можно делать безопасно."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Зачем алгоритму diff списков с ключами наибольшая возрастающая подпоследовательность (LIS)?",
+        "options": [
+          "отсортировать новый список по key перед вставкой в DOM",
+          "найти элементы, которые уже стоят в нужном порядке, и не двигать их",
+          "решить, какие элементы нужно удалить, а какие создать заново с нуля",
+          "проверить, что ключи в списке уникальны и не повторяются"
+        ],
+        "answer": 1,
+        "explanation": "Элементы из LIS сохраняют взаимный порядок, поэтому перемещаются только остальные. Это минимизирует дорогие вызовы insertBefore. Что удалить и что создать, Vue узнаёт из Map ключей, а не из LIS."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Форма хранит черновик в локальном ref. При выборе другой записи черновик должен сброситься. Что сделает этот код при смене record?",
+        "code": "<EditForm :key=\"record.id\" :record=\"record\" />",
+        "options": [
+          "обновит props, а черновик останется от прошлой записи",
+          "выдаст предупреждение: key разрешён только внутри v-for",
+          "уничтожит старый экземпляр и создаст новый с чистым состоянием",
+          "перемонтирует форму, но сохранит значения её ref из кэша экземпляров"
+        ],
+        "answer": 2,
+        "explanation": "Смена key — способ принудительно пересоздать компонент: Vue считает его другим узлом. Без key обновились бы только props, а локальный черновик остался бы прежним."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Что даёт app.config.performance = true в режиме разработки?",
+        "options": [
+          "метки init, render и patch компонентов во вкладке Performance браузера",
+          "автоматический v-memo для компонентов с тяжёлым рендером",
+          "отключение предупреждений в консоли, чтобы ускорить разработку",
+          "оптимизации компилятора из production-сборки прямо в режиме разработки"
+        ],
+        "answer": 0,
+        "explanation": "Опция включает измерения: время инициализации, рендера и патча каждого компонента видно в профиле браузера. Сама по себе она ничего не ускоряет — это инструмент поиска узких мест."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "В компоненте страницы поле поиска и 500 тяжёлых карточек. Профиль показывает, что на каждый символ заново выполняется рендер страницы со всем списком. Что сделать?",
+        "code": "<input v-model=\"query\" />\n<Card v-for=\"c in cards\" :key=\"c.id\" :card=\"c\" />",
+        "options": [
+          "обернуть список карточек в KeepAlive, чтобы не пересоздавать их",
+          "заменить v-model на :value, чтобы ввод не был реактивным",
+          "добавить v-once на каждую карточку, чтобы она не обновлялась",
+          "вынести поле поиска с его состоянием в отдельный компонент"
+        ],
+        "answer": 3,
+        "explanation": "Компонент — граница обновления: при изменении query перерисовывается тот, кто его читает. Вынесенное поле обновляет только себя. v-once сломал бы обновление карточек при изменении данных."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Экземпляр библиотеки графиков положили в ref, и графики стали тормозить. Как исправить?",
+        "code": "const chart = ref<Chart | null>(null)\nonMounted(() => {\n  chart.value = new Chart(canvas.value!, config)\n})",
+        "options": [
+          "заменить ref на reactive, тогда Proxy для экземпляра не создаётся",
+          "хранить экземпляр через markRaw или shallowRef, без глубокого Proxy",
+          "создавать экземпляр в setup, а не в onMounted",
+          "обернуть компонент с графиком в KeepAlive"
+        ],
+        "answer": 1,
+        "explanation": "ref глубоко оборачивает объект, и каждое обращение библиотеки к своим полям идёт через Proxy с track/trigger. markRaw исключает объект из реактивности. reactive дал бы ту же глубокую обёртку."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Чем является плагин Vue, который подключают через app.use?",
+        "options": [
+          "объектом с методом install(app, options) или просто функцией",
+          "компонентом, который монтируется в корень приложения перед App",
+          "composable, который автоматически вызывается в каждом setup",
+          "модулем сборщика, который подключает зависимости при сборке"
+        ],
+        "answer": 0,
+        "explanation": "app.use вызывает install с экземпляром приложения и опциями. Внутри плагин регистрирует компоненты и директивы, делает app.provide или добавляет globalProperties — так устроены Pinia и Vue Router."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Чем useFetch в Nuxt при SSR отличается от fetch в onMounted?",
+        "options": [
+          "запрос идёт только в браузере, но раньше монтирования компонента",
+          "запрос идёт дважды: на сервере для HTML и в браузере для свежести",
+          "запрос идёт на сервере, а результат передаётся клиенту без повтора",
+          "ответ кэшируется в localStorage и переживает перезагрузку страницы"
+        ],
+        "answer": 2,
+        "explanation": "useFetch и useAsyncData выполняются при серверном рендере, и данные попадают в HTML и в переданное клиенту состояние. onMounted на сервере не вызывается, поэтому fetch в нём даст пустой HTML."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Компонент работает в SPA, но в Nuxt серверный рендер падает. Как исправить?",
+        "code": "const width = ref(window.innerWidth)",
+        "options": [
+          "заменить ref на reactive, чтобы значение вычислялось лениво",
+          "обернуть выражение в computed, чтобы оно считалось при чтении",
+          "перенести чтение window в хук onServerPrefetch компонента",
+          "начальное значение 0, а window.innerWidth читать в onMounted"
+        ],
+        "answer": 3,
+        "explanation": "На сервере нет window, а onMounted там не вызывается, поэтому браузерные API читают в нём. computed прочитают во время серверного рендера, и он упадёт так же."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Когда reactive создаёт Proxy для вложенного объекта?",
+        "options": [
+          "сразу при вызове reactive, рекурсивно для всего дерева",
+          "только при первой записи во вложенный объект",
+          "лениво, при первом чтении этого вложенного объекта",
+          "никогда: вложенные поля отслеживает родительский Proxy"
+        ],
+        "answer": 2,
+        "explanation": "Вложенный Proxy создаётся в get-ловушке, когда к объекту обращаются, и кэшируется. Поэтому reactive на большом дереве дёшев, пока его не обходят целиком."
+      },
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Зачем планировщик сортирует задачи рендера по id компонента?",
+        "options": [
+          "чтобы родитель обновился раньше детей и они не рисовались со старыми props",
+          "чтобы компоненты обновлялись в порядке их регистрации через app.component",
+          "чтобы дети обновились раньше родителя и он увидел их итоговый DOM",
+          "чтобы задачи с одинаковым id выполнялись в разных микротасках"
+        ],
+        "answer": 0,
+        "explanation": "Id растут от родителя к детям. Если бы ребёнок обновился первым, он отрисовался бы с устаревшими props и сразу ещё раз после обновления родителя."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Перезапустится ли эффект после b.value++?",
+        "code": "const flag = ref(true)\nconst a = ref(1)\nconst b = ref(1)\nwatchEffect(() => {\n  console.log(flag.value ? a.value : b.value)\n})\n// после первого запуска:\nb.value++",
+        "options": [
+          "да: Vue подписывает эффект на все ref из тела функции",
+          "да, но только после nextTick, когда очистится очередь",
+          "нет: watchEffect запускается один раз и дальше не следит за данными",
+          "нет: при последнем запуске b не читался, подписки на него нет"
+        ],
+        "answer": 3,
+        "explanation": "Зависимости собираются по фактическим чтениям во время запуска. Пока flag = true, читаются только flag и a. После переключения flag зависимости пересоберутся, и подписка на b появится."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что такое vnode?",
+        "options": [
+          "облегчённый DOM-узел, который браузер создаёт вне основного документа",
+          "обычный JS-объект с описанием элемента: тип, props, дети, key",
+          "скомпилированная render-функция одного компонента шаблона",
+          "ссылка на реальный DOM-элемент с кэшем его атрибутов"
+        ],
+        "answer": 1,
+        "explanation": "Создавать и сравнивать такие объекты намного дешевле, чем трогать DOM. Render-функция возвращает дерево vnode, а рантайм сравнивает его с прошлым и патчит DOM."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "На каких границах компилятор создаёт новые блоки?",
+        "options": [
+          "на каждом элементе, у которого есть хотя бы один динамический атрибут",
+          "только на корневых элементах дочерних компонентов",
+          "на каждом элементе со статическим текстом внутри",
+          "корень шаблона, v-if и v-for — там, где может меняться структура"
+        ],
+        "answer": 3,
+        "explanation": "Внутри блока структура стабильна, и достаточно обходить плоский список динамических узлов. Там, где узлы могут появляться и исчезать (v-if, v-for), нужен свой блок."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Что рантайм сравнит у этого span при обновлении компонента?",
+        "code": "_createElementVNode('span', { class: 'name' },\n  _toDisplayString(_ctx.name), 1 /* TEXT */)",
+        "options": [
+          "только текстовое содержимое",
+          "текст и class, оба есть в вызове",
+          "все атрибуты и текст целиком",
+          "ничего: узел с флагом 1 кэширован"
+        ],
+        "answer": 0,
+        "explanation": "Patch flag 1 — TEXT: class здесь статический, и компилятор не отметил его. Кэшированные статические узлы помечаются отрицательным флагом -1, а не 1."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Чем опасен v-memo?",
+        "options": [
+          "он отключает реактивность у данных, которые читаются в поддереве",
+          "он работает только при SSR и игнорируется в браузере",
+          "если забыть зависимость в массиве, поддерево перестанет обновляться",
+          "он запрещает использовать key на элементах внутри поддерева"
+        ],
+        "answer": 2,
+        "explanation": "Пока значения массива равны прошлым, Vue пропускает поддерево, не создавая vnode. Данные при этом остаются реактивными, но изменения не видны — это трудный баг."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "При смене activeId обновляются все 1000 строк. Как передать props, чтобы обновлялись только две?",
+        "code": "<TaskRow v-for=\"row in rows\" :key=\"row.id\" :row=\"row\"\n  :active-id=\"activeId\" />",
+        "options": [
+          "передавать activeId через provide/inject, а не через props",
+          "передавать :active=\"row.id === activeId\" вместо activeId",
+          "хранить activeId в обычной переменной вместо ref",
+          "добавить v-once на TaskRow, чтобы строка не обновлялась"
+        ],
+        "answer": 1,
+        "explanation": "Булев prop меняется только у старой и новой активной строки, остальные получают то же false и не перерисовываются. Через inject строки всё равно читали бы activeId и обновлялись все."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "В виртуализированном списке пользователь разворачивает строку, прокручивает вниз и обратно — строка снова свёрнута. Что делать?",
+        "code": "// TaskRow.vue\nconst expanded = ref(false)",
+        "options": [
+          "хранить признак развёрнутости в данных списка, а не в строке",
+          "увеличить overscan до сотни строк, чтобы строка не размонтировалась",
+          "заменить key строки с row.id на индекс в видимом окне",
+          "заменить ref на reactive, чтобы состояние не сбрасывалось"
+        ],
+        "answer": 0,
+        "explanation": "Строка, ушедшая из окна, размонтируется вместе с локальным состоянием. Больший overscan лишь отодвигает проблему и добавляет DOM-узлов."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что сообщает аргумент info в app.config.errorHandler(err, instance, info)?",
+        "options": [
+          "стек вызовов ошибки в виде массива строк",
+          "сколько раз эта ошибка уже повторялась",
+          "уровень серьёзности ошибки для мониторинга",
+          "где произошла ошибка, например в render-функции или в setup"
+        ],
+        "answer": 3,
+        "explanation": "info указывает источник ошибки внутри Vue, например 'render function' или 'setup function'. Стек есть в самом объекте err."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Внутренняя админка доступна только после логина. Нужен ли ей SSR?",
+        "options": [
+          "да: без SSR приложение за логином не сможет обращаться к API",
+          "обычно нет: SEO не важно, и SPA хватает без сервера рендеринга",
+          "да: SSR обязателен для любого приложения на Vue 3 и Nuxt",
+          "нет: SSR в принципе несовместим с авторизацией по cookie"
+        ],
+        "answer": 1,
+        "explanation": "SSR нужен ради SEO и быстрого первого экрана публичных страниц. Для приложения за логином сервер рендеринга — лишняя инфраструктура, а в Nuxt можно выбрать режим только клиента."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "В SSR-приложении в консоли предупреждение hydration mismatch. Как исправить?",
+        "code": "<label :for=\"id\">Email</label>\n<input :id=\"id\" />\n\n// script setup\nconst id = `f-${Math.random().toString(36).slice(2)}`",
+        "options": [
+          "перенести генерацию id в onBeforeMount, до гидратации",
+          "обернуть id в ref, чтобы Vue синхронизировал его после гидратации",
+          "генерировать id через useId(): он совпадает на сервере и клиенте",
+          "заменить Math.random() на Date.now(), чтобы id был уникальным"
+        ],
+        "answer": 2,
+        "explanation": "Случайное значение на сервере и клиенте разное, поэтому разметка расходится. useId из Vue 3.5 даёт стабильные id для SSR. Date.now() тоже отличается между сервером и клиентом."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Что возвращает nextTick?",
+        "options": [
+          "промис, который выполнится в следующем кадре через requestAnimationFrame",
+          "функцию, которая отменяет запланированный рендер компонента",
+          "промис, который выполнится после первого setTimeout(0) в браузере",
+          "промис, который выполнится после очистки текущей очереди обновлений"
+        ],
+        "answer": 3,
+        "explanation": "Очистка очереди планируется как микротаска, а nextTick ждёт её завершения, поэтому после await nextTick() DOM уже обновлён. Это не кадр и не макрозадача."
+      },
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Чем отличаются значения опции flush у watch?",
+        "options": [
+          "'pre' — до монтирования, 'post' — после размонтирования, 'sync' — в рендере",
+          "'pre' — до рендера, 'post' — после рендера, 'sync' — в обход планировщика",
+          "'pre' — синхронно, 'post' — в setTimeout, 'sync' — в общей микротаске",
+          "'pre' — на сервере, 'post' — в браузере, 'sync' — в обоих окружениях"
+        ],
+        "answer": 1,
+        "explanation": "По умолчанию 'pre': колбэк в очереди до рендера компонента. 'post' нужен, когда колбэку нужен обновлённый DOM, а 'sync' вызывает колбэк сразу при каждом изменении."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "В tasks добавили уже выполненную задачу. Обновится ли HeavyList?",
+        "code": "const active = computed(() => tasks.value.filter((t) => !t.done))\n// <HeavyList :items=\"active\" />\n\ntasks.value.push({ id: 7, title: 'Готово', done: true })",
+        "options": [
+          "да: filter вернул новый массив, и сравнение результата не помогло",
+          "нет: с Vue 3.4 computed не оповещает, если содержимое не изменилось",
+          "нет: computed не пересчитается, раз задача не проходит фильтр",
+          "да, но только если в HeavyList есть deep watch на items"
+        ],
+        "answer": 0,
+        "explanation": "Начиная с 3.4 computed не оповещает подписчиков, если результат равен старому, но сравнение идёт по ссылке. filter всегда даёт новый массив, поэтому prop items меняется, и HeavyList обновляется."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "С чего начинается сравнение списков детей с ключами во Vue 3?",
+        "options": [
+          "строится Map ключей сразу для всех элементов старого списка целиком",
+          "все старые узлы удаляются, а новые создаются заново",
+          "пропускаются совпадающие по key элементы в начале и в конце",
+          "вычисляется LIS сразу для всего нового списка"
+        ],
+        "answer": 2,
+        "explanation": "Это быстро покрывает частые случаи «добавили в конец» и «удалили из начала». Map ключей и LIS строятся только для оставшейся середины."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Когда оправдано писать render-функцию вместо шаблона?",
+        "options": [
+          "когда структура сильно динамическая, например тег зависит от prop",
+          "всегда: render-функции быстрее, потому что их не нужно компилировать",
+          "когда в компоненте много статической разметки и мало логики",
+          "когда компонент принимает слоты и передаёт их дальше потомкам"
+        ],
+        "answer": 0,
+        "explanation": "В остальных случаях шаблон лучше: компилятор знает разметку и даёт рантайму подсказки (кэш статики, patch flags), которых у рукописной render-функции нет."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Сколько DOM-перемещений сделает Vue при таком обновлении списка?",
+        "code": "старый список: A B C D\nновый список:  A C B D\n(у каждого элемента key = буква)",
+        "options": [
+          "два: B и C меняются местами в DOM",
+          "четыре: переставляется весь список целиком",
+          "ни одного: текст B и C перепишется на месте",
+          "одно: A и D пропущены, из пары B и C двигается один"
+        ],
+        "answer": 3,
+        "explanation": "Совпадающие начало (A) и конец (D) пропускаются. В середине LIS состоит из одного элемента, он остаётся на месте, а второй переносится одним insertBefore. Переписывание на месте — поведение без key или с key-индексом."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Чем грозит KeepAlive без max в приложении с десятками вкладок?",
+        "options": [
+          "после десяти закэшированных компонентов вкладки перестанут открываться",
+          "все экземпляры с данными остаются в памяти, и кэш становится утечкой",
+          "компоненты будут пересоздаваться при каждом переключении вкладки",
+          "Vue выдаст ошибку, потому что max — обязательный параметр KeepAlive"
+        ],
+        "answer": 1,
+        "explanation": "Кэш ускоряет переключение, но без ограничения хранит всё. С max вытесняются давно не использованные экземпляры."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Пользователь переименовал задачу, а в таблице название не меняется. В чём баг?",
+        "code": "<div v-for=\"row in rows\" :key=\"row.id\"\n  v-memo=\"[row.id === selectedId]\">\n  {{ row.title }}\n</div>",
+        "options": [
+          "в массиве v-memo нет row.title или версии строки",
+          "rows нужно хранить в reactive, ref не видит поля объектов",
+          "v-memo нельзя ставить на элемент вместе с v-for",
+          "key должен быть индексом, иначе Vue не видит изменения"
+        ],
+        "answer": 0,
+        "explanation": "Пока значения массива v-memo не изменились, Vue пропускает поддерево целиком. Использование v-memo вместе с v-for на одном элементе — как раз рекомендуемый способ."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Первый экран страницы грузится долго. Как исправить с минимальными изменениями?",
+        "code": "import RichEditor from './RichEditor.vue' // ~400 КБ\n// редактор показывается только по кнопке «Редактировать»",
+        "options": [
+          "обернуть RichEditor в KeepAlive, чтобы он не пересоздавался",
+          "показывать редактор через v-show вместо v-if",
+          "загружать редактор через defineAsyncComponent, когда он нужен",
+          "добавить v-once на RichEditor, чтобы он рендерился один раз"
+        ],
+        "answer": 2,
+        "explanation": "Статический import кладёт редактор в основной чанк, и первый экран ждёт его загрузки. defineAsyncComponent выносит его в отдельный чанк, который грузится при первом показе."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Когда вместо кастомной директивы лучше написать composable?",
+        "options": [
+          "когда нужно управлять фокусом или кликом вне элемента",
+          "когда одна и та же логика нужна в нескольких компонентах",
+          "когда нужны хуки жизненного цикла вроде mounted",
+          "когда логика не привязана к конкретному DOM-элементу"
+        ],
+        "answer": 3,
+        "explanation": "Директива нужна для низкоуровневой работы с элементом: фокус, клик вне, ленивая загрузка картинок. Переиспользуемость сама по себе есть у обоих подходов."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Какой путь миграции большого проекта с Vue 2 считается безопасным?",
+        "options": [
+          "сначала переписать все компоненты на Composition API, затем обновить Vue",
+          "сначала Vue 2.7, затем Vue 3 через @vue/compat с исправлением предупреждений",
+          "заменить версию в package.json: API Vue 3 полностью совместим с Vue 2",
+          "обновить Vue до 3 и сразу удалить Options API из всех компонентов"
+        ],
+        "answer": 1,
+        "explanation": "Во Vue 2.7 уже есть Composition API и script setup, а сборка совместимости показывает, что нужно исправить. Переписывать всё на Composition API заранее не обязательно — Options API во Vue 3 поддерживается."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Меню с этой директивой закрыли и удалили из DOM, а при кликах вызывается его обработчик. В чём баг?",
+        "code": "export const vClickOutside: Directive<HTMLElement, () => void> = {\n  mounted(el, binding) {\n    document.addEventListener('click', (e) => {\n      if (!el.contains(e.target as Node)) binding.value()\n    })\n  },\n}",
+        "options": [
+          "нет хука unmounted, который снимает слушатель с document",
+          "слушатель нужно вешать на el, а не на document",
+          "нужен хук updated, чтобы обновить binding.value",
+          "клик нужно ловить в фазе захвата, а не в фазе всплытия события"
+        ],
+        "answer": 0,
+        "explanation": "Слушатель на document живёт дольше элемента. Его нужно сохранить (например, в WeakMap по el) и снять в unmounted. Слушатель на самом el не увидел бы кликов вне элемента."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Зачем Vue пересобирает зависимости эффекта при каждом его запуске?",
+        "options": [
+          "чтобы заметить свойства, которые добавили через Vue.set уже после запуска",
+          "чтобы сбросить кэш всех computed и пересчитать их значения заново",
+          "чтобы не оставалось подписок на ветку v-if, которая больше не рендерится",
+          "чтобы освободить память под Proxy, созданные при прошлом запуске"
+        ],
+        "answer": 2,
+        "explanation": "Набор прочитанных данных зависит от ветвления. Если оставить старые подписки, эффект перезапускался бы из-за данных, которые он больше не использует."
+      },
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Что изменилось в поведении computed начиная с Vue 3.4?",
+        "options": [
+          "computed стал пересчитываться сразу при изменении зависимостей",
+          "computed стал сравнивать массивы и объекты по содержимому, а не по ссылке",
+          "computed стал доступен для записи без указания функции set",
+          "если новый результат равен старому, подписчики не перезапускаются"
+        ],
+        "answer": 3,
+        "explanation": "Раньше любое изменение зависимости тянуло перерисовку подписчиков. Сравнение идёт по значению для примитивов и по ссылке для объектов, поэтому новый массив из filter всё равно оповестит."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Сколько раз выполнится buildHeavyReport, пока отчёт скрыт?",
+        "code": "const report = computed(() => buildHeavyReport(rows.value))\n\n<!-- шаблон -->\n<ReportView v-if=\"showReport\" :data=\"report\" />\n\n// showReport всё время false, rows меняются 100 раз",
+        "options": [
+          "100 раз: computed пересчитывается при каждом изменении массива rows",
+          "ни разу: report никто не читает, он лишь помечается грязным",
+          "один раз: изменения склеиваются планировщиком в одну задачу",
+          "один раз при создании компонента, а дальше берётся из кэша"
+        ],
+        "answer": 1,
+        "explanation": "computed ленивый: вычисление происходит только при чтении .value. Скрытая ветка v-if не рендерится, поэтому report не читается ни при создании, ни после изменений."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Как Vue сравнивает список детей, если key не указан?",
+        "options": [
+          "патчит на месте по позициям, как при key = index",
+          "сопоставляет элементы по их текстовому содержимому",
+          "пересоздаёт весь список при каждом обновлении",
+          "генерирует ключи автоматически из props элементов"
+        ],
+        "answer": 0,
+        "explanation": "Без ключей Vue не знает, какой элемент каким стал, и обновляет узлы по порядку. Поэтому у такого списка те же проблемы с состоянием строк, что и у key-индекса."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "От чего во Vue 3 в первую очередь зависит стоимость обновления компонента с большим шаблоном?",
+        "options": [
+          "от общего числа элементов, включая статические",
+          "от глубины вложенности DOM-дерева шаблона",
+          "от количества динамических мест в шаблоне",
+          "от количества CSS-классов на элементах шаблона"
+        ],
+        "answer": 2,
+        "explanation": "Статика кэшируется, а block tree хранит плоский список динамических узлов с patch flags. Поэтому большой, но в основном статичный шаблон обновляется дёшево."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Компонент ничего не рендерит, а в консоли предупреждение. Как исправить?",
+        "code": "setup() {\n  const open = ref(true)\n  return h('div', open.value ? 'Открыто' : 'Закрыто')\n}",
+        "options": [
+          "вызвать h внутри хука onMounted этого компонента",
+          "обернуть open в computed перед вызовом h",
+          "заменить h на createElement, как во Vue 2",
+          "вернуть функцию: return () => h('div', ...)"
+        ],
+        "answer": 3,
+        "explanation": "setup должен вернуть render-функцию, которая вызывается при каждом рендере и читает актуальные данные. Готовый vnode Vue не принимает: в dev-режиме это даёт предупреждение."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Какой недостаток есть у виртуализации списка?",
+        "options": [
+          "поиск через Ctrl+F и скринридеры не видят строки вне окна",
+          "все строки всё равно создаются в DOM, но скрываются CSS",
+          "она несовместима с shallowRef и замороженными данными",
+          "прокрутка всегда дёргается из-за пересчёта высоты контейнера"
+        ],
+        "answer": 0,
+        "explanation": "В DOM находятся только видимые строки плюс запас, поэтому остальное недоступно ни поиску по странице, ни вспомогательным технологиям. Есть и цена с разной высотой строк."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "calcTotal обходит 10 000 задач и вызывается при каждом рендере, даже когда tasks не менялись. Что поможет?",
+        "code": "<span>Итого: {{ calcTotal() }}</span>\n\nfunction calcTotal() {\n  return tasks.value.reduce((s, t) => s + t.hours, 0)\n}",
+        "options": [
+          "посчитать итог в onMounted и сохранить результат в отдельный обычный ref",
+          "добавить v-once на span с итогом, чтобы он не обновлялся",
+          "сделать total через computed: пересчёт только при изменении tasks",
+          "вызывать calcTotal внутри nextTick, чтобы не блокировать рендер"
+        ],
+        "answer": 2,
+        "explanation": "Вызов метода в шаблоне выполняется при каждом рендере, а computed кэширует результат до изменения зависимостей. Подсчёт в onMounted и v-once перестали бы отражать новые задачи."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Анализ бандла показывает, что lodash занимает десятки килобайт, хотя используется одна функция. Как исправить?",
+        "code": "import _ from 'lodash'\n\nconst search = _.debounce(fetchResults, 300)",
+        "options": [
+          "подгружать lodash через defineAsyncComponent при первом вызове поиска",
+          "import { debounce } from 'lodash-es', чтобы tree-shaking убрал лишнее",
+          "вызывать _.debounce только внутри onMounted, а не в setup",
+          "заменить import на require, чтобы lodash грузился лениво"
+        ],
+        "answer": 1,
+        "explanation": "Пакет lodash — CommonJS, и импорт по умолчанию тянет всю библиотеку. lodash-es состоит из ES-модулей, и сборщик оставляет только импортированные функции. defineAsyncComponent предназначен для компонентов."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что из этого удалено во Vue 3 и требует замены при миграции?",
+        "options": [
+          "хук mounted и опция methods в Options API",
+          "опция computed в объекте компонента",
+          "механизм provide/inject между компонентами",
+          "методы $on и $off, на которых строили event bus"
+        ],
+        "answer": 3,
+        "explanation": "Вместо event bus используют mitt или стор. Options API, включая mounted, methods и computed, во Vue 3 полностью поддерживается, provide/inject тоже остался."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Какую ошибку не поймает app.config.errorHandler?",
+        "options": [
+          "из промиса, запущенного в обработчике без await и возврата",
+          "ошибку, выброшенную в render-функции компонента",
+          "ошибку внутри setup дочернего компонента",
+          "ошибку в колбэке watch или в хуке жизненного цикла"
+        ],
+        "answer": 0,
+        "explanation": "errorHandler получает только ошибки, которые проходят через Vue. Промис, о котором Vue не знает, отклонится мимо него, поэтому нужен ещё глобальный обработчик unhandledrejection."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Шаблон и данные одинаковы на сервере и клиенте, но в консоли hydration mismatch. Почему?",
+        "code": "<p class=\"hint\">\n  <div>Подсказка: {{ text }}</div>\n</p>",
+        "options": [
+          "интерполяция {{ text }} внутри div при SSR не поддерживается",
+          "браузер исправляет невалидный div внутри p, и DOM расходится с ожидаемым",
+          "класс hint задан статически, а при SSR нужен :class",
+          "div внутри p нужно обернуть в ClientOnly, иначе он потеряется"
+        ],
+        "answer": 1,
+        "explanation": "Парсер браузера закрывает p перед div, и реальный DOM отличается от того, что ожидает гидратация. Исправление — валидная разметка, например div вместо p."
+      }
+    ]
+  ]
+}

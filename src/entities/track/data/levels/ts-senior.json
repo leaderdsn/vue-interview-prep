@@ -1,1 +1,845 @@
-{"id":"ts-senior","trackId":"ts","level":"senior","topics":[{"title":"Conditional types и infer","html":"\n<p>Условные типы — это «if» на уровне системы типов. Вместе с <code>infer</code> они позволяют вычислять одни типы из других: доставать тип результата функции, элемента массива, пропсов компонента, параметров маршрута. На senior-уровне от вас ждут не только умения их читать, но и понимания тонкостей: распределения по union, поведения <code>never</code> и границ, за которыми типы становятся вредными.</p>\n<h3>Как устроен условный тип</h3>\n<p>Запись <code>T extends U ? X : Y</code> читается так: «если тип <code>T</code> можно присвоить типу <code>U</code>, результат <code>X</code>, иначе <code>Y</code>». Слово <code>extends</code> здесь означает не наследование, а совместимость по присваиванию. Пока <code>T</code> — неизвестный параметр, условие откладывается, а вычисляется в момент подстановки конкретного типа.</p>\n<pre class=\"code\"><span class=\"c\">// Условный тип: T extends U ? X : Y — «if» на уровне типов</span>\ntype IsString&lt;T&gt; = T extends string ? true : false\ntype A = IsString&lt;'a'&gt;  <span class=\"c\">// true</span>\ntype B = IsString&lt;42&gt;   <span class=\"c\">// false</span>\n\n<span class=\"c\">// Распределение: голый T в union применяется к каждому члену</span>\ntype ToArray&lt;T&gt; = T extends any ? T[] : never\ntype C = ToArray&lt;string | number&gt;   <span class=\"c\">// string[] | number[]</span>\n\n<span class=\"c\">// Отключаем распределение — оборачиваем в кортеж</span>\ntype ToArrayAll&lt;T&gt; = [T] extends [any] ? T[] : never\ntype D = ToArrayAll&lt;string | number&gt; <span class=\"c\">// (string | number)[]</span>\n\n<span class=\"c\">// Так устроены встроенные Exclude и Extract</span>\ntype MyExclude&lt;T, U&gt; = T extends U ? never : T\ntype E = MyExclude&lt;'a' | 'b' | 'c', 'a'&gt; <span class=\"c\">// 'b' | 'c'</span>\n\n<span class=\"c\">// Ловушка: never — пустой union, распределение даёт never</span>\ntype F = IsString&lt;never&gt;         <span class=\"c\">// never, а не false</span>\ntype IsNever&lt;T&gt; = [T] extends [never] ? true : false\ntype G = IsNever&lt;never&gt;          <span class=\"c\">// true</span></pre>\n<p>Самое важное свойство — <b>распределение по union</b> (distributive conditional types). Если слева от <code>extends</code> стоит «голый» параметр типа, а при подстановке в него приходит union, условие применяется к каждому члену по отдельности, и результаты объединяются. Поэтому <code>ToArray&lt;string | number&gt;</code> — это <code>string[] | number[]</code>, а не <code>(string | number)[]</code>.</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>ToArray of A | B</b><span>на вход union</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Разбиение</b><span>A и B по отдельности</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Условие</b><span>для каждого члена</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Склейка</b><span>A[] | B[]</span></div></div><figcaption>Распределение условного типа по union</figcaption></figure>\n<p>На распределении построены встроенные <code>Exclude</code>, <code>Extract</code> и <code>NonNullable</code>: <code>Exclude&lt;T, U&gt;</code> — это <code>T extends U ? never : T</code>. Для каждого члена union, совместимого с <code>U</code>, получается <code>never</code>, а <code>never</code> в union исчезает.</p>\n<p>Распределение не всегда нужно. Чтобы его выключить, обе части оборачивают в кортеж: <code>[T] extends [U]</code>. Тогда union проверяется целиком.</p>\n<div class=\"note warn\">Ловушка с never: never — это пустой union. Распределение по пустому union даёт пустой результат, поэтому IsString&lt;never&gt; равно never, а не true и не false. Правильная проверка на never всегда пишется через кортеж: [T] extends [never].</div>\n<h3>infer: достаём тип из структуры</h3>\n<p>Ключевое слово <code>infer</code> работает только внутри условия <code>extends</code> и означает: «объяви здесь переменную типа и подбери её так, чтобы условие выполнилось». Это сопоставление с образцом на уровне типов. Если сопоставление удалось, переменная доступна в ветке «да».</p>\n<pre class=\"code\"><span class=\"c\">// infer — «объяви переменную типа и достань её из структуры»</span>\ntype MyReturnType&lt;F&gt; = F extends (...args: any[]) =&gt; infer R ? R : never\ntype MyAwaited&lt;T&gt; = T extends Promise&lt;infer V&gt; ? MyAwaited&lt;V&gt; : T\ntype ElementOf&lt;T&gt; = T extends readonly (infer E)[] ? E : never\n\ntype R1 = MyReturnType&lt;() =&gt; Promise&lt;number&gt;&gt;   <span class=\"c\">// Promise&lt;number&gt;</span>\ntype R2 = MyAwaited&lt;Promise&lt;Promise&lt;string&gt;&gt;&gt;   <span class=\"c\">// string</span>\ntype R3 = ElementOf&lt;readonly ['a', 'b']&gt;        <span class=\"c\">// 'a' | 'b'</span>\n\n<span class=\"c\">// Извлечь тип пропсов из Vue-компонента</span>\ntype PropsOf&lt;C&gt; = C extends new (...args: any) =&gt; { $props: infer P } ? P : never\n\n<span class=\"c\">// infer в шаблонных строках: разбор маршрута</span>\ntype Params&lt;S extends string&gt; =\n  S extends `${string}:${infer P}/${infer Rest}` ? P | Params&lt;`/${Rest}`&gt;\n  : S extends `${string}:${infer P}` ? P\n  : never\ntype P = Params&lt;'/projects/:projectId/tasks/:taskId'&gt; <span class=\"c\">// 'projectId' | 'taskId'</span>\n\n<span class=\"c\">// infer с ограничением (TS 4.7+)</span>\ntype FirstNum&lt;T&gt; = T extends [infer N extends number, ...unknown[]] ? N : never\ntype N1 = FirstNum&lt;[1, 'a']&gt; <span class=\"c\">// 1</span></pre>\n<p>Разберём примеры. <code>MyReturnType</code> сопоставляет функцию с образцом «функция с любыми аргументами, возвращающая R» и достаёт <code>R</code>. <code>MyAwaited</code> разворачивает промис рекурсивно, поэтому <code>Promise&lt;Promise&lt;string&gt;&gt;</code> превращается в <code>string</code> — так устроен и встроенный <code>Awaited</code>, только он дополнительно учитывает любые thenable-объекты. <code>ElementOf</code> достаёт тип элемента массива или кортежа; на кортеже <code>readonly ['a', 'b']</code> получается union <code>'a' | 'b'</code>.</p>\n<p>Самый эффектный пример — разбор строки маршрута. Шаблонный тип <code>'/projects/:projectId/tasks/:taskId'</code> сопоставляется с образцом «что угодно, двоеточие, имя параметра P, слэш, остаток», после чего тип рекурсивно вызывает себя на остатке. Результат — union имён параметров, и теперь функцию <code>navigate</code> нельзя вызвать, не передав все параметры. Похожим образом типизированы параметры в vue-router (через генерацию типов маршрутов) и пути в i18n-библиотеках.</p>\n<p>С TS 4.7 у <code>infer</code> может быть ограничение: <code>infer N extends number</code> — сопоставление удастся, только если найденный тип совместим с <code>number</code>. Это убирает лишний вложенный условный тип.</p>\n<h3>Где это нужно в реальном проекте и где остановиться</h3>\n<p>Условные типы встречаются в повседневном коде чаще, чем кажется: в типах Vue (<code>UnwrapRef</code>, <code>ExtractPropTypes</code>, тип пропсов компонента), в Pinia (вывод state и getters из setup-функции), в библиотеках форм (тип значения по пути поля), в клиентах API, которые по имени эндпоинта выводят тип ответа. Senior-разработчику нужно уметь их читать, чтобы понимать ошибки библиотек, и писать — для внутренних инструментов команды.</p>\n<p>Но у мощных типов есть цена, и её важно назвать на собеседовании. Глубокая рекурсия замедляет компилятор и редактор, а при превышении лимитов появляются ошибки «Type instantiation is excessively deep and possibly infinite». Сообщения об ошибках становятся многоэкранными и непонятными для коллег. Поэтому вычисляемые типы держат в одном месте (обычно в общем модуле типов), покрывают тестами типов (<code>expectTypeOf</code> в Vitest или <code>@ts-expect-error</code>) и не используют там, где хватит простого интерфейса.</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Условный тип — это T extends U ? X : Y, где extends значит совместимость. Если T голый параметр, условие распределяется по union — на этом построены Exclude и Extract; выключается обёрткой в кортеж. never даёт never, поэтому проверку на never пишут через [T] extends [never]. infer объявляет переменную типа внутри образца и позволяет достать тип результата функции, значения промиса, элемента массива или параметры из строки маршрута. Такие типы держу в одном модуле и покрываю тестами типов, потому что они дорогие для компилятора и тяжёлые для чтения.»</div>"},{"title":"Mapped types и template literal types","html":"\n<p>Mapped types строят новый тип объекта, проходя по ключам другого. Template literal types строят строковые типы из других типов. Вместе с conditional types они образуют основу «программирования на типах», и именно на них устроены все встроенные утилиты вроде <code>Partial</code> и <code>Readonly</code>.</p>\n<h3>Mapped types и модификаторы</h3>\n<p>Синтаксис <code>{ [K in keyof T]: T[K] }</code> читается как цикл: «для каждого ключа <code>K</code> из ключей <code>T</code> создай поле <code>K</code> с типом <code>T[K]</code>». Сам по себе такой тип копирует объект, но внутри цикла можно менять и тип значения, и модификаторы поля.</p>\n<pre class=\"code\"><span class=\"c\">// Mapped type: пройти по ключам и построить новый объект</span>\ntype MyPartial&lt;T&gt; = { [K in keyof T]?: T[K] }\ntype MyReadonly&lt;T&gt; = { readonly [K in keyof T]: T[K] }\n\n<span class=\"c\">// Модификаторы с минусом снимают ? и readonly</span>\ntype Mutable&lt;T&gt; = { -readonly [K in keyof T]: T[K] }\ntype MyRequired&lt;T&gt; = { [K in keyof T]-?: T[K] }\n\ninterface Task { id: number; title: string; done: boolean; dueAt?: string }\n\n<span class=\"c\">// Состояние формы: для каждого поля — значение, ошибка, touched</span>\ntype FormState&lt;T&gt; = {\n  [K in keyof T]: { value: T[K]; error: string | null; touched: boolean }\n}\ntype TaskForm = FormState&lt;Pick&lt;Task, 'title' | 'dueAt'&gt;&gt;\n\n<span class=\"c\">// Переименование ключей через as</span>\ntype Getters&lt;T&gt; = {\n  [K in keyof T as `get${Capitalize&lt;string &amp; K&gt;}`]: () =&gt; T[K]\n}\ntype TaskGetters = Getters&lt;Task&gt; <span class=\"c\">// getId, getTitle, getDone, getDueAt</span>\n\n<span class=\"c\">// Фильтрация ключей: as ... never выкидывает ключ</span>\ntype PickByValue&lt;T, V&gt; = { [K in keyof T as T[K] extends V ? K : never]: T[K] }\ntype BoolFields = PickByValue&lt;Task, boolean&gt; <span class=\"c\">// { done: boolean }</span></pre>\n<p>Модификаторы <code>?</code> и <code>readonly</code> можно добавлять (<code>+</code>, по умолчанию) и снимать (<code>-</code>). Так устроены встроенные утилиты: <code>Partial</code> добавляет <code>?</code>, <code>Required</code> пишет <code>-?</code> и тем самым убирает и необязательность, и <code>undefined</code>, который она добавляла. Своя утилита <code>Mutable</code> с <code>-readonly</code> снимает защиту от записи.</p>\n<p>Полезное свойство: mapped type по <code>keyof T</code> является <b>гомоморфным</b> — он сохраняет модификаторы исходного типа. Если поле <code>dueAt</code> было необязательным, в <code>FormState</code> оно останется необязательным. Поэтому <code>FormState&lt;Pick&lt;Task, 'title' | 'dueAt'&gt;&gt;</code> описывает состояние формы, где для каждого поля хранится значение, текст ошибки и флаг «трогали ли поле», и тип формы автоматически следует за моделью.</p>\n<p>На mapped types пишут и рекурсивные утилиты, которых нет в стандартной библиотеке: <code>DeepPartial</code> и <code>DeepReadonly</code>. Внутри цикла значение проверяется условным типом: если это объект, утилита вызывается рекурсивно, иначе поле копируется как есть. Тонкость — массивы и функции тоже объекты, их обычно обрабатывают отдельными ветками.</p>\n<h3>Переименование и фильтрация ключей через as</h3>\n<p>С TS 4.1 после <code>in keyof T</code> можно написать <code>as</code> и вычислить новое имя ключа. В примере <code>Getters&lt;Task&gt;</code> из поля <code>title</code> получается метод <code>getTitle</code>: имя строится шаблонным типом, а встроенная утилита <code>Capitalize</code> делает первую букву заглавной. Пересечение <code>string &amp; K</code> нужно потому, что ключи бывают не только строками, но и числами и символами, а в шаблонную строку можно подставить не всё.</p>\n<p>Если выражение в <code>as</code> даёт <code>never</code>, ключ исчезает из результата. Так фильтруют поля по типу значения: <code>PickByValue&lt;Task, boolean&gt;</code> оставляет только булевы поля. Во фронтенде так выбирают, например, только числовые колонки для агрегатов в таблице или только строковые поля для полнотекстового поиска.</p>\n<div class=\"table-wrap\"><table><thead><tr><th>Синтаксис</th><th>Что делает</th></tr></thead><tbody><tr><td><code>[K in keyof T]: ...</code></td><td>перебирает ключи, сохраняя модификаторы</td></tr><tr><td><code>+?</code>, <code>-?</code></td><td>добавляет или снимает необязательность</td></tr><tr><td><code>+readonly</code>, <code>-readonly</code></td><td>добавляет или снимает readonly</td></tr><tr><td><code>as НовоеИмя</code></td><td>переименовывает ключ</td></tr><tr><td><code>as ... ? K : never</code></td><td>отфильтровывает ключ</td></tr></tbody></table></div>\n<h3>Template literal types: типобезопасные события и пути</h3>\n<p>Template literal types используют тот же синтаксис, что шаблонные строки в JS, но на уровне типов. Подставлять можно строковые, числовые и булевы литералы и их union. Если подставить union, результат — все комбинации: две сущности на два действия дают четыре имени события. Есть и встроенные утилиты для строк: <code>Uppercase</code>, <code>Lowercase</code>, <code>Capitalize</code>, <code>Uncapitalize</code>.</p>\n<pre class=\"code\"><span class=\"c\">// Шаблонные литеральные типы: строки, собранные из других типов</span>\ntype Entity = 'project' | 'task'\ntype Action = 'created' | 'deleted'\ntype EventName = `${Entity}:${Action}`\n<span class=\"c\">// 'project:created' | 'project:deleted' | 'task:created' | 'task:deleted'</span>\n\n<span class=\"c\">// Типобезопасная шина событий</span>\ntype Payloads = {\n  'project:created': { id: number; title: string }\n  'task:deleted': { id: number }\n}\nfunction on&lt;E extends keyof Payloads&gt;(event: E, cb: (p: Payloads[E]) =&gt; void) {}\non('task:deleted', (p) =&gt; p.id)       <span class=\"c\">// p: { id: number }</span>\n<span class=\"c\">// on('task:removed', ...)            // Ошибка: нет такого события</span>\n\n<span class=\"c\">// Пути к вложенным полям: 'user.address.city'</span>\ntype Path&lt;T&gt; = {\n  [K in keyof T &amp; string]: T[K] extends object\n    ? K | `${K}.${Path&lt;T[K]&gt;}`\n    : K\n}[keyof T &amp; string]\n\ninterface Settings { user: { name: string; address: { city: string } }; theme: string }\ntype SettingsPath = Path&lt;Settings&gt;\n<span class=\"c\">// 'user' | 'user.name' | 'user.address' | 'user.address.city' | 'theme'</span></pre>\n<p>Первый практический пример — <b>шина событий</b>. Карта <code>Payloads</code> связывает имя события с формой данных. Функция <code>on&lt;E extends keyof Payloads&gt;</code> принимает только существующее имя, а колбэк получает тип данных именно этого события. Опечатка в имени события или обращение к несуществующему полю данных теперь ошибка компиляции. Так же типизированы <code>defineEmits</code> во Vue и <code>addEventListener</code> в DOM-типах (через карту <code>HTMLElementEventMap</code>).</p>\n<p>Второй пример — <b>пути к вложенным полям</b>: <code>'user.address.city'</code>. Тип <code>Path</code> — это mapped type, который для каждого ключа возвращает либо сам ключ, либо ключ с точкой и путями вложенного объекта, а затем индексом <code>[keyof T &amp; string]</code> собирает значения всех полей в один union. Такие типы используют библиотеки форм (VeeValidate, React Hook Form), i18n и функции вида <code>get(obj, path)</code>.</p>\n<div class=\"note warn\">Цена: число комбинаций растёт как произведение размеров union. Для глубоких и широких моделей Path может дать тысячи строк, замедлить редактор и упереться в лимит около 100 000 членов union. Рекурсию ограничивают по глубине, а для огромных моделей от таких типов отказываются.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Mapped type — это цикл по ключам: [K in keyof T]. Внутри можно менять тип значения и модификаторы, плюс и минус для ? и readonly — так устроены Partial, Required, Readonly. Через as ключи переименовываются, например title в getTitle, а as с never фильтрует ключи. Template literal types собирают строковые типы и перемножают union. Я применяю их для типобезопасной шины событий по карте имя → данные и для путей к полям формы, но слежу за размером union, чтобы не убить производительность редактора.»</div>"},{"title":"Структурная типизация и её ловушки","html":"\n<p>TypeScript использует <b>структурную</b> типизацию: совместимость типов определяется их формой, а не именем или происхождением. Это главное отличие от Java или C#, где типизация номинальная. Почти все «странные» случаи, которые любят разбирать на senior-собеседовании, следуют из этого принципа: лишние свойства, которые то ловятся, то нет, вариантность функций и необходимость брендированных типов.</p>\n<h3>Форма важнее имени</h3>\n<p>Если у типа <code>Vector</code> есть поля <code>x</code> и <code>y</code> нужных типов, его можно присвоить переменной типа <code>Point</code>, даже если эти интерфейсы никак не связаны. Более того, объект с <b>лишними</b> полями тоже совместим: если функция ждёт <code>{ field: string }</code>, ей подойдёт объект с <code>field</code> и ещё десятью полями. Это естественно для JavaScript, где объекты создаются литералами, а не классами, и удобно: можно передать строку таблицы целиком туда, где нужна только часть полей.</p>\n<pre class=\"code\">interface Column { field: string; width?: number }\n\n<span class=\"c\">// Проверка лишних свойств работает только для «свежего» литерала</span>\nconst c1: Column = { field: 'title', widht: 120 } <span class=\"c\">// Ошибка: опечатка поймана</span>\n\nconst raw = { field: 'title', widht: 120 }\nconst c2: Column = raw  <span class=\"c\">// ОК! Структурно raw подходит, лишнее поле молча игнорируется</span>\n\n<span class=\"c\">// Структурная совместимость: имена типов не важны, важна форма</span>\ninterface Point { x: number; y: number }\ninterface Vector { x: number; y: number }\nconst v: Vector = { x: 1, y: 2 }\nconst p: Point = v      <span class=\"c\">// ОК — формы совпадают</span>\n\n<span class=\"c\">// Слабый тип (все поля опциональны) ловит полностью чужие объекты</span>\ninterface Options { debounce?: number; immediate?: boolean }\nconst opts = { delay: 300 }\n<span class=\"c\">// const o: Options = opts // Ошибка: нет ни одного общего свойства</span></pre>\n<p>Но из-за этого опечатка в необязательном поле (<code>widht</code> вместо <code>width</code>) не была бы ошибкой: объект просто «имеет лишнее поле», а необязательное <code>width</code> отсутствует. Поэтому в TypeScript есть отдельная эвристика — <b>проверка лишних свойств</b> (excess property check). Она срабатывает только для <b>свежего объектного литерала</b>, записанного прямо там, где известен целевой тип: при присваивании, передаче аргумента, возврате из функции. Если объект сначала сохранить в переменную, литерал перестаёт быть свежим, и лишние поля пройдут молча.</p>\n<p>Ещё одна эвристика — проверка <b>слабых типов</b> (weak type detection): если у типа все поля необязательны, присвоить ему объект без единого общего поля нельзя. Это ловит передачу совсем не того объекта в options.</p>\n<div class=\"note warn\">Ловушка на собеседовании: «почему опечатка в литерале ловится, а в переменной нет?» Ответ: проверка лишних свойств — не часть структурной совместимости, а отдельная эвристика для свежих литералов. Спред тоже обходит её частично: { ...base, widht: 1 } проверяется, а поля из base — нет.</div>\n<h3>Вариантность</h3>\n<p>Вариантность отвечает на вопрос: если <code>Dog</code> совместим с <code>Animal</code>, совместим ли <code>Box&lt;Dog&gt;</code> с <code>Box&lt;Animal&gt;</code>? Возможны четыре ответа. <b>Ковариантность</b> — да, в ту же сторону (так ведут себя возвращаемые значения: функция, возвращающая собаку, годится там, где ждут функцию, возвращающую животное). <b>Контравариантность</b> — в обратную сторону (параметры: обработчик любого животного годится там, где ждут обработчик собаки). <b>Инвариантность</b> — только точное совпадение. <b>Бивариантность</b> — в обе стороны, что небезопасно.</p>\n<pre class=\"code\">class Animal { name = '' }\nclass Dog extends Animal { bark() {} }\n\n<span class=\"c\">// Массивы ковариантны — и это дыра в типах</span>\nconst dogs: Dog[] = [new Dog()]\nconst animals: Animal[] = dogs   <span class=\"c\">// разрешено</span>\nanimals.push(new Animal())       <span class=\"c\">// тоже разрешено</span>\ndogs[1].bark()                   <span class=\"c\">// TypeError в рантайме</span>\n\n<span class=\"c\">// Параметры функций контравариантны (strictFunctionTypes)</span>\ntype Handler&lt;T&gt; = (value: T) =&gt; void\nconst handleAnimal: Handler&lt;Animal&gt; = (a) =&gt; console.log(a.name)\nconst h1: Handler&lt;Dog&gt; = handleAnimal    <span class=\"c\">// ОК: умеет любое животное — умеет и собаку</span>\n<span class=\"c\">// const h2: Handler&lt;Animal&gt; = (d: Dog) =&gt; d.bark() // Ошибка</span>\n\n<span class=\"c\">// Но методы, объявленные как метод, бивариантны — проверка слабее</span>\ninterface ListenerMethod { on(value: Animal): void }\ninterface ListenerProp { on: (value: Animal) =&gt; void }\nconst m: ListenerMethod = { on: (d: Dog) =&gt; d.bark() } <span class=\"c\">// ОК (!)</span>\n<span class=\"c\">// const pr: ListenerProp = { on: (d: Dog) =&gt; d.bark() } // Ошибка</span>\n\n<span class=\"c\">// Явные аннотации вариантности (TS 4.7)</span>\ninterface Producer&lt;out T&gt; { get(): T }\ninterface Consumer&lt;in T&gt; { put(v: T): void }</pre>\n<p>В TypeScript есть две намеренные дыры, о которых стоит знать. Первая — <b>массивы ковариантны</b>, хотя в них можно писать. Массив собак присваивается переменной «массив животных», через неё туда кладут обычное животное, и в рантайме у «собаки» нет метода <code>bark</code>. Это компромисс ради удобства: строгая инвариантность массивов сломала бы огромное количество обычного кода. Защита — <code>readonly</code>-массивы в API: из них можно только читать, и ковариантность становится безопасной.</p>\n<p>Вторая — <b>бивариантность методов</b>. Флаг <code>strictFunctionTypes</code> (входит в <code>strict</code>) делает параметры функций контравариантными, но только для свойств-функций (<code>on: (v: Animal) =&gt; void</code>). Методы, объявленные синтаксисом метода (<code>on(v: Animal): void</code>), сознательно остаются бивариантными, иначе не компилировались бы встроенные типы вроде <code>Array</code>. Практический вывод: колбэки в своих интерфейсах объявляйте как свойства-функции. С TS 4.7 у параметров типа можно явно указать вариантность через <code>in</code> и <code>out</code> — это ускоряет проверку и документирует намерение.</p>\n<h3>Branded types и unknown на границах</h3>\n<p>Структурная типизация мешает, когда у значений одинаковая форма, но разный смысл. <code>projectId</code> и <code>userId</code> — оба <code>number</code>, и компилятор не заметит, если вы передадите один вместо другого. Та же история с суммой в рублях и копейках, сырой строкой и проверенным email, обычным HTML и очищенным от XSS.</p>\n<p>Решение — <b>брендированные (номинальные) типы</b>. К базовому типу добавляется пересечение с «фантомным» полем-меткой, которого в рантайме нет. Два бренда с разными метками несовместимы, и обычный <code>number</code> тоже нельзя передать без явного приведения.</p>\n<pre class=\"code\"><span class=\"c\">// Брендированные (номинальные) типы: одинаковая форма, разный смысл</span>\ntype Brand&lt;T, B extends string&gt; = T &amp; { readonly __brand: B }\n\ntype ProjectId = Brand&lt;number, 'ProjectId'&gt;\ntype UserId = Brand&lt;number, 'UserId'&gt;\ntype Email = Brand&lt;string, 'Email'&gt;\n\nfunction getProject(id: ProjectId) {}\n\nconst uid = 5 as UserId\n<span class=\"c\">// getProject(uid)  // Ошибка: UserId не ProjectId</span>\n<span class=\"c\">// getProject(5)    // Ошибка: обычный number тоже нельзя</span>\n\n<span class=\"c\">// Бренд выдаётся только после проверки — «умный конструктор»</span>\nfunction toEmail(value: string): Email {\n  if (!/^[^@\\s]+@[^@\\s]+$/.test(value)) throw new Error('Некорректный email')\n  return value as Email\n}\nfunction sendInvite(to: Email) {}\nsendInvite(toEmail('dev@company.ru')) <span class=\"c\">// гарантированно проверено</span>\n\n<span class=\"c\">// В рантайме бренда нет: это просто number/string, ноль накладных расходов</span></pre>\n<p>Значение с брендом создаётся через <code>as</code>, и правильная практика — делать это в одном месте, в «умном конструкторе», который сначала проверяет значение. Тогда тип <code>Email</code> означает не просто «строка», а «строка, прошедшая проверку», и функции, принимающие <code>Email</code>, могут не проверять её повторно. Бренды бесплатны в рантайме — это всё тот же <code>number</code> или <code>string</code>. Библиотеки валидации (zod с <code>.brand()</code>) умеют выдавать их автоматически.</p>\n<p>На тех же границах системы важен выбор между <code>unknown</code> и <code>any</code>. Всё, что приходит снаружи (ответы API, <code>postMessage</code>, <code>localStorage</code>, параметры URL, ошибки в <code>catch</code>), правильно типизировать как <code>unknown</code>: тогда компилятор заставит проверить данные до использования. Если же функция возвращает <code>any</code>, ошибка расползается по коду без единого предупреждения. Хорошая практика для API-слоя: сырой ответ — <code>unknown</code>, затем валидация, затем точный тип.</p>\n<div class=\"boxes\"><div class=\"box hl\"><b>Структурная типизация</b><span>совместимы типы одинаковой формы; удобно для JS-объектов</span></div><div class=\"box \"><b>Проверка лишних свойств</b><span>только для свежих литералов, это эвристика против опечаток</span></div><div class=\"box bad\"><b>Вариантность</b><span>массивы ковариантны, методы бивариантны — две известные дыры</span></div><div class=\"box good\"><b>Branded types</b><span>номинальность там, где форма одинакова, а смысл разный</span></div></div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«TypeScript структурный: совместимость определяется формой, поэтому объект с лишними полями подходит. Опечатки в литералах ловит отдельная эвристика — проверка лишних свойств, но только для свежего литерала. Есть известные дыры: ковариантные массивы и бивариантные методы, поэтому колбэки объявляю свойствами-функциями, а в API отдаю readonly-массивы. Когда нужна номинальность, например чтобы не путать ProjectId и UserId, использую branded types с умным конструктором. Внешние данные типизирую как unknown, а не any.»</div>"},{"title":"Конфигурация и типизация на уровне проекта","html":"\n<p>На senior-уровне спрашивают не только про синтаксис типов, но и про то, как TypeScript настроен в проекте: какие флаги включены и почему, как подключаются типы окружения и библиотек, откуда берутся типы API и что защищает от неправильных данных в рантайме. Это решения, которые принимает ведущий разработчик и которые влияют на всю команду.</p>\n<h3>tsconfig: флаги, которые важны</h3>\n<div class=\"code-label\">tsconfig.app.json</div><pre class=\"code\">{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"bundler\",\n    \"lib\": [\"ES2022\", \"DOM\", \"DOM.Iterable\"],\n\n    \"strict\": true,\n    \"noUncheckedIndexedAccess\": true,\n    \"exactOptionalPropertyTypes\": true,\n    \"noImplicitOverride\": true,\n    \"noFallthroughCasesInSwitch\": true,\n\n    \"verbatimModuleSyntax\": true,\n    \"isolatedModules\": true,\n    \"skipLibCheck\": true,\n    \"noEmit\": true,\n\n    \"jsx\": \"preserve\",\n    \"types\": [\"vite/client\"],\n    \"paths\": { \"@/*\": [\"./src/*\"] }\n  },\n  \"include\": [\"src/**/*.ts\", \"src/**/*.vue\", \"env.d.ts\"]\n}</pre>\n<p><b>strict</b> — это пакет флагов: <code>strictNullChecks</code> (без него <code>null</code> и <code>undefined</code> присваиваются чему угодно, и TypeScript теряет половину пользы), <code>noImplicitAny</code>, <code>strictFunctionTypes</code>, <code>strictPropertyInitialization</code>, <code>useUnknownInCatchVariables</code> и другие. Новые strict-проверки в будущих версиях TS тоже будут включаться этим флагом, поэтому обновление TypeScript может принести новые ошибки — это нормально.</p>\n<p>Важно, что некоторые полезные флаги <b>не входят</b> в strict, потому что ломают много существующего кода. <b>noUncheckedIndexedAccess</b> добавляет <code>undefined</code> к результату обращения по индексу и по ключу словаря. Без него <code>rows[0]</code> из пустого массива имеет тип <code>string</code>, хотя на деле там <code>undefined</code> — классический источник ошибок в таблицах и кэшах. <b>exactOptionalPropertyTypes</b> различает «поля нет» и «поле равно undefined», что важно для PATCH-запросов, где эти два случая значат разное.</p>\n<pre class=\"code\"><span class=\"c\">// Без noUncheckedIndexedAccess</span>\nconst rows: string[] = []\nconst firstRow = rows[0]          <span class=\"c\">// string — но на деле undefined!</span>\nfirstRow.toUpperCase()            <span class=\"c\">// TypeError в рантайме</span>\n\nconst cache: Record&lt;string, number&gt; = {}\ncache['missing'].toFixed()        <span class=\"c\">// то же самое</span>\n\n<span class=\"c\">// С noUncheckedIndexedAccess: true</span>\nconst first = rows[0]             <span class=\"c\">// string | undefined</span>\nif (first) first.toUpperCase()    <span class=\"c\">// обязаны проверить</span>\nconst hit = cache['missing'] ?? 0 <span class=\"c\">// number</span>\n\n<span class=\"c\">// exactOptionalPropertyTypes: «нет поля» и «поле = undefined» различаются</span>\ninterface Filters { search?: string }\n<span class=\"c\">// const f: Filters = { search: undefined } // Ошибка при флаге</span></pre>\n<p><b>moduleResolution: \"bundler\"</b> (TS 5.0) — режим для проектов со сборщиком: поддерживает поле <code>exports</code> в package.json, как Node, но не требует расширений в импортах. Для Vite-проекта это правильный выбор. <b>verbatimModuleSyntax</b> требует писать <code>import type</code> для импортов, которые нужны только как типы: сборщик, обрабатывающий файлы по одному, не знает, тип это или значение, и без явной пометки может оставить импорт, которого нет в рантайме. <b>isolatedModules</b> запрещает конструкции, которые нельзя скомпилировать без информации о других файлах (например, реэкспорт типа без <code>type</code>). <b>skipLibCheck</b> пропускает проверку <code>.d.ts</code> из node_modules и заметно ускоряет проверку. <b>noEmit</b> — потому что JS генерирует Vite, а TypeScript только проверяет.</p>\n<h3>Декларации, d.ts и module augmentation</h3>\n<p>Файлы <code>.d.ts</code> содержат только типы, без кода. Они нужны в трёх случаях: описать глобальные сущности окружения, дополнить типы чужих библиотек и описать библиотеку, у которой нет своих типов (если нет пакета в <code>@types</code>).</p>\n<pre class=\"code\"><span class=\"c\">// ---- env.d.ts (без import/export — объявления глобальные) ----</span>\n<span class=\"c\">/// &lt;reference types=\"vite/client\" /&gt;</span>\ninterface ImportMetaEnv {\n  readonly VITE_API_URL: string\n  readonly VITE_SENTRY_DSN?: string\n}\n\n<span class=\"c\">// ---- src/types/augment.d.ts (есть import — значит файл-модуль) ----</span>\nimport 'vue-router'\ndeclare module 'vue' {\n  interface ComponentCustomProperties {\n    $t: (key: string) =&gt; string          <span class=\"c\">// глобальное свойство в шаблонах</span>\n    $formatMoney: (value: number) =&gt; string\n  }\n}\ndeclare module 'vue-router' {\n  interface RouteMeta {\n    requiresAuth?: boolean               <span class=\"c\">// route.meta.requiresAuth типизирован</span>\n    title: string\n  }\n}\n\n<span class=\"c\">// ---- src/types/shims.d.ts — библиотека без типов ----</span>\ndeclare module 'legacy-chart-lib' {\n  export function draw(el: HTMLElement, data: number[]): void\n}</pre>\n<p>Главная тонкость здесь — <b>глобальный файл против модуля</b>. Файл без единого <code>import</code> или <code>export</code> считается глобальным скриптом: его объявления видны везде, так добавляются переменные окружения в <code>ImportMetaEnv</code> (интерфейс сливается с объявленным в <code>vite/client</code>). Если же в файле есть import или export, он становится модулем, и запись <code>declare module 'vue'</code> работает как <b>расширение</b> (augmentation) существующего модуля — интерфейсы внутри сливаются с оригинальными. В глобальном файле та же запись объявила бы модуль <code>'vue'</code> заново и затёрла бы все его типы: после этого перестают находиться <code>ref</code> и <code>defineComponent</code>. Это частая причина «внезапно сломались все типы Vue».</p>\n<p>Через augmentation во Vue добавляют типы глобальных свойств (<code>$t</code> из i18n, свои плагины) в <code>ComponentCustomProperties</code>, поля <code>meta</code> маршрутов в <code>RouteMeta</code>, а также свои опции и пропсы глобальных компонентов.</p>\n<h3>Типы API: генерация и проверка в рантайме</h3>\n<p>Описывать типы ответов сервера руками — источник рассинхронизации: бэкенд переименовал поле, а фронтенд об этом не знает. Если у API есть машиночитаемая схема, типы <b>генерируют</b>. Для REST это OpenAPI (Swagger) и инструменты вроде <code>openapi-typescript</code> или <code>orval</code>, для GraphQL — GraphQL Code Generator, который по схеме и вашим запросам генерирует типы ответов и даже типизированные composables. Генерацию запускают в CI, и изменение контракта сразу превращается в ошибки компиляции.</p>\n<pre class=\"code\"><span class=\"c\"># Генерация типов из OpenAPI (REST)</span>\nnpx openapi-typescript https://api.example.com/openapi.json -o src/api/schema.d.ts\n\n<span class=\"c\"># Генерация типов из GraphQL-схемы и операций</span>\nnpx graphql-codegen --config codegen.ts\n\n<span class=\"c\"># Проверка типов в CI: tsc не видит .vue, нужен vue-tsc</span>\nnpx vue-tsc --noEmit</pre>\n<p>Но даже идеальные типы не проверяют данные в рантайме. Типы стираются при сборке, и запись <code>as Project</code> после <code>res.json()</code> — обещание, а не проверка. Если сервер пришлёт <code>title: null</code>, компилятор об этом не узнает, а <code>title.toUpperCase()</code> упадёт у пользователя. Для данных, которым нельзя доверять (внешние API, <code>localStorage</code>, параметры URL, <code>postMessage</code>), используют <b>runtime-валидацию</b>.</p>\n<pre class=\"code\">import { z } from 'zod'\n\n<span class=\"c\">// Схема — одна точка правды: и проверка в рантайме, и тип</span>\nconst ProjectSchema = z.object({\n  id: z.number().int(),\n  title: z.string().min(1),\n  status: z.enum(['draft', 'active', 'archived']),\n  deadline: z.string().nullable(),\n})\ntype Project = z.infer&lt;typeof ProjectSchema&gt; <span class=\"c\">// тип выведен из схемы</span>\n\nasync function fetchProject(id: number): Promise&lt;Project&gt; {\n  const res = await fetch(`/api/projects/${id}`)\n  const json: unknown = await res.json()\n  <span class=\"c\">// as Project здесь — обещание, а не проверка</span>\n  const parsed = ProjectSchema.safeParse(json)\n  if (!parsed.success) {\n    console.error(parsed.error.issues)  <span class=\"c\">// сервер прислал не то, что ждали</span>\n    throw new Error('Некорректный ответ API')\n  }\n  return parsed.data                    <span class=\"c\">// Project, проверенный в рантайме</span>\n}</pre>\n<p>Библиотека zod (или valibot, ArkType) описывает схему кодом. Из схемы выводится тип через <code>z.infer</code>, поэтому описание одно, а не два. <code>safeParse</code> проверяет данные и при успехе возвращает их уже с точным типом, а при ошибке — подробный список проблем, который полезно отправлять в мониторинг. Компромисс — размер бандла и время проверки на больших ответах, поэтому часто валидируют на границе только критичные данные или включают строгую проверку в dev и тестах.</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Схема API</b><span>OpenAPI или GraphQL</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Генерация</b><span>типы в src/api</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Ответ unknown</b><span>данные из сети</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Валидация</b><span>zod safeParse</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step good\"><b>Точный тип</b><span>дальше по приложению</span></div></div><figcaption>Типы описывают контракт, валидация проверяет его в рантайме</figcaption></figure>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«В проекте включаю strict и дополнительно noUncheckedIndexedAccess. Для Vite — moduleResolution bundler, verbatimModuleSyntax и isolatedModules, noEmit, потому что JS собирает Vite, а типы проверяет vue-tsc в CI. Типы окружения и расширения Vue описываю в d.ts через module augmentation и слежу, чтобы файл с declare module был модулем. Типы API генерирую из OpenAPI или GraphQL-схемы. А поскольку типы стираются в рантайме, внешние данные валидирую схемой zod и вывожу тип из неё.»</div>"}],"quiz":[{"topic":0,"type":"theory","question":"Когда условный тип T extends U ? X : Y распределяется по union?","options":["Всегда, если в T подставлен union","Когда T — «голый» параметр типа и в него приходит union","Только если справа, в U, тоже стоит union","Только когда в условии есть infer, иначе тип вычисляется целиком"],"answer":1,"explanation":"Распределение срабатывает, если слева от extends стоит параметр типа без обёртки. Тогда условие применяется к каждому члену union по отдельности. Чтобы его выключить, оборачивают обе части в кортеж: [T] extends [U]."},{"topic":0,"type":"practice","question":"Какой тип получится?","code":"type ToArray<T> = T extends any ? T[] : never\ntype R = ToArray<string | number>","options":["(string | number)[]","string[] | number[]","never","string[] & number[]"],"answer":1,"explanation":"T голый, поэтому условие применяется отдельно к string и к number, и результаты объединяются. Вариант (string | number)[] даст запись [T] extends [any]."},{"topic":0,"type":"practice","question":"Чему равен тип R?","code":"type IsString<T> = T extends string ? true : false\ntype R = IsString<never>","options":["true","false","never","boolean"],"answer":2,"explanation":"never — пустой union. Распределение по пустому union даёт пустой результат, то есть never. Поэтому IsNever пишут как [T] extends [never]."},{"topic":1,"type":"theory","question":"Что делает конструкция as внутри mapped type?","options":["Приводит тип значения каждого поля к указанному","Переименовывает или отфильтровывает ключи","Делает поля readonly, как модификатор перед ключом","Ничего, это синтаксический сахар для keyof"],"answer":1,"explanation":"Key remapping (TS 4.1): новое имя ключа вычисляется из K, а never в as выкидывает ключ. Так можно построить ключи вида getTitle из title через шаблонные типы, а условием с never удалить ненужные ключи, например все не-boolean поля."},{"topic":1,"type":"practice","question":"Какой тип у поля avatar в результате?","code":"type User = { readonly id: number; avatar?: string }\ntype T = { -readonly [K in keyof User]-?: User[K] }","options":["avatar?: string","avatar: string","avatar: string | undefined (обязательное)","readonly avatar: string"],"answer":1,"explanation":"Модификатор -? убирает необязательность и вместе с ней undefined, добавленный знаком вопроса. -readonly снимает readonly. Так устроены встроенные Required и самописный Mutable."},{"topic":1,"type":"practice","question":"Сколько членов в union EventName?","code":"type Entity = 'project' | 'task' | 'user'\ntype Action = 'created' | 'deleted'\ntype EventName = `${Entity}:${Action}`","options":["2","3","5","6"],"answer":3,"explanation":"Шаблонный литеральный тип перемножает union: каждая сущность с каждым действием, 3 × 2 = 6. При больших union это быстро раздувает тип, у компилятора есть лимит около 100 000 членов."},{"topic":2,"type":"theory","question":"Когда TypeScript проверяет лишние свойства объекта (excess property check)?","options":["При любом присваивании объекта переменной","Только для свежего объектного литерала","Только в strict-режиме и только для классов","Никогда, типизация структурная"],"answer":1,"explanation":"Проверка срабатывает, только когда свежий объектный литерал присваивается прямо в место с известным типом. Если объект сначала сохранить в переменную, а потом присвоить, лишние поля пройдут молча: по структуре объект подходит. Проверка свежих литералов — эвристика для поиска опечаток."},{"topic":2,"type":"theory","question":"Что такое branded type и сколько он стоит в рантайме?","options":["Класс-обёртка, создаёт объект на каждое значение","Пересечение с фантомной меткой, рантайм не затрагивает","Специальный тип из lib.dom для идентификаторов","Тип, который проверяется в рантайме через instanceof при присваивании"],"answer":1,"explanation":"Branded type — пересечение базового типа с фантомным полем-меткой; в рантайме он ничего не стоит, значение остаётся обычным number или string. TypeScript структурный, и два number-идентификатора неразличимы. Фантомное поле __brand делает их несовместимыми на уровне типов, а значение получают через as в функции-конструкторе после проверки."},{"topic":2,"type":"practice","question":"Какое присваивание скомпилируется?","code":"class Animal { name = '' }\nclass Dog extends Animal { bark() {} }\ninterface A { on(v: Animal): void }\ninterface B { on: (v: Animal) => void }\nconst a: A = { on: (d: Dog) => d.bark() }\nconst b: B = { on: (d: Dog) => d.bark() }","options":["Оба: параметр колбэка можно сузить до подкласса","Только a: параметры методов проверяются бивариантно","Только b: свойство-функция проверяется мягче метода","Ни одно: параметр нельзя сузить с Animal до Dog"],"answer":1,"explanation":"Параметры методов проверяются бивариантно, а у свойства-функции — контравариантно. strictFunctionTypes делает параметры функций контравариантными, но сознательно не трогает методы (иначе ломались бы встроенные типы вроде Array). Поэтому в своих интерфейсах надёжнее объявлять колбэки свойством-функцией."},{"topic":3,"type":"theory","question":"Что делает флаг noUncheckedIndexedAccess?","options":["Запрещает обращение к массивам по индексу","Добавляет undefined к типу обращения по индексу","Отключает проверку типов у элементов массивов","Проверяет границы массива в рантайме и бросает ошибку"],"answer":1,"explanation":"Флаг добавляет undefined к результату обращения по индексу и по ключу Record, заставляя проверять наличие. Без флага rows[0] имеет тип string, даже если массив пуст. С флагом — string | undefined. Он не входит в strict, поэтому его включают отдельно."},{"topic":3,"type":"theory","question":"Почему as Project после res.json() не защищает от неправильного ответа сервера?","options":["Потому что as работает только с классами, а не с интерфейсами","Потому что типы стираются: as — указание, а не проверка","Потому что json() возвращает строку, а не объект","as защищает, если включён strict: тогда приведение проверяется"],"answer":1,"explanation":"После компиляции от типов не остаётся ничего: as — указание компилятору, а не проверка. Проверить данные в рантайме может только код, например схема zod. Данные из сети, localStorage или URL нужно валидировать кодом, а тип выводить из схемы (z.infer), чтобы не описывать его дважды."},{"topic":3,"type":"practice","question":"Что выведет код, если сервер вернул { \"id\": 1, \"title\": null }?","code":"interface Project { id: number; title: string }\nconst p = (await res.json()) as Project\nconsole.log(p.title.toUpperCase())","options":["Ошибка компиляции: title может быть null","TypeError: Cannot read properties of null","Выведет NULL: null приводится к строке","Выведет пустую строку вместо null"],"answer":1,"explanation":"Компилятор доверяет as и считает title строкой, но в рантайме там null. Это классический пример, почему внешние данные проверяют схемой, а не приведением типа."}]}
+{
+  "id": "ts-senior",
+  "trackId": "ts",
+  "level": "senior",
+  "topics": [
+    {
+      "title": "Conditional types и infer",
+      "html": "\n<p>Условные типы — это «if» на уровне системы типов. Вместе с <code>infer</code> они позволяют вычислять одни типы из других: доставать тип результата функции, элемента массива, пропсов компонента, параметров маршрута. На senior-уровне от вас ждут не только умения их читать, но и понимания тонкостей: распределения по union, поведения <code>never</code> и границ, за которыми типы становятся вредными.</p>\n<h3>Как устроен условный тип</h3>\n<p>Запись <code>T extends U ? X : Y</code> читается так: «если тип <code>T</code> можно присвоить типу <code>U</code>, результат <code>X</code>, иначе <code>Y</code>». Слово <code>extends</code> здесь означает не наследование, а совместимость по присваиванию. Пока <code>T</code> — неизвестный параметр, условие откладывается, а вычисляется в момент подстановки конкретного типа.</p>\n<pre class=\"code\"><span class=\"c\">// Условный тип: T extends U ? X : Y — «if» на уровне типов</span>\ntype IsString&lt;T&gt; = T extends string ? true : false\ntype A = IsString&lt;'a'&gt;  <span class=\"c\">// true</span>\ntype B = IsString&lt;42&gt;   <span class=\"c\">// false</span>\n\n<span class=\"c\">// Распределение: голый T в union применяется к каждому члену</span>\ntype ToArray&lt;T&gt; = T extends any ? T[] : never\ntype C = ToArray&lt;string | number&gt;   <span class=\"c\">// string[] | number[]</span>\n\n<span class=\"c\">// Отключаем распределение — оборачиваем в кортеж</span>\ntype ToArrayAll&lt;T&gt; = [T] extends [any] ? T[] : never\ntype D = ToArrayAll&lt;string | number&gt; <span class=\"c\">// (string | number)[]</span>\n\n<span class=\"c\">// Так устроены встроенные Exclude и Extract</span>\ntype MyExclude&lt;T, U&gt; = T extends U ? never : T\ntype E = MyExclude&lt;'a' | 'b' | 'c', 'a'&gt; <span class=\"c\">// 'b' | 'c'</span>\n\n<span class=\"c\">// Ловушка: never — пустой union, распределение даёт never</span>\ntype F = IsString&lt;never&gt;         <span class=\"c\">// never, а не false</span>\ntype IsNever&lt;T&gt; = [T] extends [never] ? true : false\ntype G = IsNever&lt;never&gt;          <span class=\"c\">// true</span></pre>\n<p>Самое важное свойство — <b>распределение по union</b> (distributive conditional types). Если слева от <code>extends</code> стоит «голый» параметр типа, а при подстановке в него приходит union, условие применяется к каждому члену по отдельности, и результаты объединяются. Поэтому <code>ToArray&lt;string | number&gt;</code> — это <code>string[] | number[]</code>, а не <code>(string | number)[]</code>.</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>ToArray of A | B</b><span>на вход union</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Разбиение</b><span>A и B по отдельности</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Условие</b><span>для каждого члена</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Склейка</b><span>A[] | B[]</span></div></div><figcaption>Распределение условного типа по union</figcaption></figure>\n<p>На распределении построены встроенные <code>Exclude</code>, <code>Extract</code> и <code>NonNullable</code>: <code>Exclude&lt;T, U&gt;</code> — это <code>T extends U ? never : T</code>. Для каждого члена union, совместимого с <code>U</code>, получается <code>never</code>, а <code>never</code> в union исчезает.</p>\n<p>Распределение не всегда нужно. Чтобы его выключить, обе части оборачивают в кортеж: <code>[T] extends [U]</code>. Тогда union проверяется целиком.</p>\n<div class=\"note warn\">Ловушка с never: never — это пустой union. Распределение по пустому union даёт пустой результат, поэтому IsString&lt;never&gt; равно never, а не true и не false. Правильная проверка на never всегда пишется через кортеж: [T] extends [never].</div>\n<h3>infer: достаём тип из структуры</h3>\n<p>Ключевое слово <code>infer</code> работает только внутри условия <code>extends</code> и означает: «объяви здесь переменную типа и подбери её так, чтобы условие выполнилось». Это сопоставление с образцом на уровне типов. Если сопоставление удалось, переменная доступна в ветке «да».</p>\n<pre class=\"code\"><span class=\"c\">// infer — «объяви переменную типа и достань её из структуры»</span>\ntype MyReturnType&lt;F&gt; = F extends (...args: any[]) =&gt; infer R ? R : never\ntype MyAwaited&lt;T&gt; = T extends Promise&lt;infer V&gt; ? MyAwaited&lt;V&gt; : T\ntype ElementOf&lt;T&gt; = T extends readonly (infer E)[] ? E : never\n\ntype R1 = MyReturnType&lt;() =&gt; Promise&lt;number&gt;&gt;   <span class=\"c\">// Promise&lt;number&gt;</span>\ntype R2 = MyAwaited&lt;Promise&lt;Promise&lt;string&gt;&gt;&gt;   <span class=\"c\">// string</span>\ntype R3 = ElementOf&lt;readonly ['a', 'b']&gt;        <span class=\"c\">// 'a' | 'b'</span>\n\n<span class=\"c\">// Извлечь тип пропсов из Vue-компонента</span>\ntype PropsOf&lt;C&gt; = C extends new (...args: any) =&gt; { $props: infer P } ? P : never\n\n<span class=\"c\">// infer в шаблонных строках: разбор маршрута</span>\ntype Params&lt;S extends string&gt; =\n  S extends `${string}:${infer P}/${infer Rest}` ? P | Params&lt;`/${Rest}`&gt;\n  : S extends `${string}:${infer P}` ? P\n  : never\ntype P = Params&lt;'/projects/:projectId/tasks/:taskId'&gt; <span class=\"c\">// 'projectId' | 'taskId'</span>\n\n<span class=\"c\">// infer с ограничением (TS 4.7+)</span>\ntype FirstNum&lt;T&gt; = T extends [infer N extends number, ...unknown[]] ? N : never\ntype N1 = FirstNum&lt;[1, 'a']&gt; <span class=\"c\">// 1</span></pre>\n<p>Разберём примеры. <code>MyReturnType</code> сопоставляет функцию с образцом «функция с любыми аргументами, возвращающая R» и достаёт <code>R</code>. <code>MyAwaited</code> разворачивает промис рекурсивно, поэтому <code>Promise&lt;Promise&lt;string&gt;&gt;</code> превращается в <code>string</code> — так устроен и встроенный <code>Awaited</code>, только он дополнительно учитывает любые thenable-объекты. <code>ElementOf</code> достаёт тип элемента массива или кортежа; на кортеже <code>readonly ['a', 'b']</code> получается union <code>'a' | 'b'</code>.</p>\n<p>Самый эффектный пример — разбор строки маршрута. Шаблонный тип <code>'/projects/:projectId/tasks/:taskId'</code> сопоставляется с образцом «что угодно, двоеточие, имя параметра P, слэш, остаток», после чего тип рекурсивно вызывает себя на остатке. Результат — union имён параметров, и теперь функцию <code>navigate</code> нельзя вызвать, не передав все параметры. Похожим образом типизированы параметры в vue-router (через генерацию типов маршрутов) и пути в i18n-библиотеках.</p>\n<p>С TS 4.7 у <code>infer</code> может быть ограничение: <code>infer N extends number</code> — сопоставление удастся, только если найденный тип совместим с <code>number</code>. Это убирает лишний вложенный условный тип.</p>\n<h3>Где это нужно в реальном проекте и где остановиться</h3>\n<p>Условные типы встречаются в повседневном коде чаще, чем кажется: в типах Vue (<code>UnwrapRef</code>, <code>ExtractPropTypes</code>, тип пропсов компонента), в Pinia (вывод state и getters из setup-функции), в библиотеках форм (тип значения по пути поля), в клиентах API, которые по имени эндпоинта выводят тип ответа. Senior-разработчику нужно уметь их читать, чтобы понимать ошибки библиотек, и писать — для внутренних инструментов команды.</p>\n<p>Но у мощных типов есть цена, и её важно назвать на собеседовании. Глубокая рекурсия замедляет компилятор и редактор, а при превышении лимитов появляются ошибки «Type instantiation is excessively deep and possibly infinite». Сообщения об ошибках становятся многоэкранными и непонятными для коллег. Поэтому вычисляемые типы держат в одном месте (обычно в общем модуле типов), покрывают тестами типов (<code>expectTypeOf</code> в Vitest или <code>@ts-expect-error</code>) и не используют там, где хватит простого интерфейса.</p>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Условный тип — это T extends U ? X : Y, где extends значит совместимость. Если T голый параметр, условие распределяется по union — на этом построены Exclude и Extract; выключается обёрткой в кортеж. never даёт never, поэтому проверку на never пишут через [T] extends [never]. infer объявляет переменную типа внутри образца и позволяет достать тип результата функции, значения промиса, элемента массива или параметры из строки маршрута. Такие типы держу в одном модуле и покрываю тестами типов, потому что они дорогие для компилятора и тяжёлые для чтения.»</div>"
+    },
+    {
+      "title": "Mapped types и template literal types",
+      "html": "\n<p>Mapped types строят новый тип объекта, проходя по ключам другого. Template literal types строят строковые типы из других типов. Вместе с conditional types они образуют основу «программирования на типах», и именно на них устроены все встроенные утилиты вроде <code>Partial</code> и <code>Readonly</code>.</p>\n<h3>Mapped types и модификаторы</h3>\n<p>Синтаксис <code>{ [K in keyof T]: T[K] }</code> читается как цикл: «для каждого ключа <code>K</code> из ключей <code>T</code> создай поле <code>K</code> с типом <code>T[K]</code>». Сам по себе такой тип копирует объект, но внутри цикла можно менять и тип значения, и модификаторы поля.</p>\n<pre class=\"code\"><span class=\"c\">// Mapped type: пройти по ключам и построить новый объект</span>\ntype MyPartial&lt;T&gt; = { [K in keyof T]?: T[K] }\ntype MyReadonly&lt;T&gt; = { readonly [K in keyof T]: T[K] }\n\n<span class=\"c\">// Модификаторы с минусом снимают ? и readonly</span>\ntype Mutable&lt;T&gt; = { -readonly [K in keyof T]: T[K] }\ntype MyRequired&lt;T&gt; = { [K in keyof T]-?: T[K] }\n\ninterface Task { id: number; title: string; done: boolean; dueAt?: string }\n\n<span class=\"c\">// Состояние формы: для каждого поля — значение, ошибка, touched</span>\ntype FormState&lt;T&gt; = {\n  [K in keyof T]: { value: T[K]; error: string | null; touched: boolean }\n}\ntype TaskForm = FormState&lt;Pick&lt;Task, 'title' | 'dueAt'&gt;&gt;\n\n<span class=\"c\">// Переименование ключей через as</span>\ntype Getters&lt;T&gt; = {\n  [K in keyof T as `get${Capitalize&lt;string &amp; K&gt;}`]: () =&gt; T[K]\n}\ntype TaskGetters = Getters&lt;Task&gt; <span class=\"c\">// getId, getTitle, getDone, getDueAt</span>\n\n<span class=\"c\">// Фильтрация ключей: as ... never выкидывает ключ</span>\ntype PickByValue&lt;T, V&gt; = { [K in keyof T as T[K] extends V ? K : never]: T[K] }\ntype BoolFields = PickByValue&lt;Task, boolean&gt; <span class=\"c\">// { done: boolean }</span></pre>\n<p>Модификаторы <code>?</code> и <code>readonly</code> можно добавлять (<code>+</code>, по умолчанию) и снимать (<code>-</code>). Так устроены встроенные утилиты: <code>Partial</code> добавляет <code>?</code>, <code>Required</code> пишет <code>-?</code> и тем самым убирает и необязательность, и <code>undefined</code>, который она добавляла. Своя утилита <code>Mutable</code> с <code>-readonly</code> снимает защиту от записи.</p>\n<p>Полезное свойство: mapped type по <code>keyof T</code> является <b>гомоморфным</b> — он сохраняет модификаторы исходного типа. Если поле <code>dueAt</code> было необязательным, в <code>FormState</code> оно останется необязательным. Поэтому <code>FormState&lt;Pick&lt;Task, 'title' | 'dueAt'&gt;&gt;</code> описывает состояние формы, где для каждого поля хранится значение, текст ошибки и флаг «трогали ли поле», и тип формы автоматически следует за моделью.</p>\n<p>На mapped types пишут и рекурсивные утилиты, которых нет в стандартной библиотеке: <code>DeepPartial</code> и <code>DeepReadonly</code>. Внутри цикла значение проверяется условным типом: если это объект, утилита вызывается рекурсивно, иначе поле копируется как есть. Тонкость — массивы и функции тоже объекты, их обычно обрабатывают отдельными ветками.</p>\n<h3>Переименование и фильтрация ключей через as</h3>\n<p>С TS 4.1 после <code>in keyof T</code> можно написать <code>as</code> и вычислить новое имя ключа. В примере <code>Getters&lt;Task&gt;</code> из поля <code>title</code> получается метод <code>getTitle</code>: имя строится шаблонным типом, а встроенная утилита <code>Capitalize</code> делает первую букву заглавной. Пересечение <code>string &amp; K</code> нужно потому, что ключи бывают не только строками, но и числами и символами, а в шаблонную строку можно подставить не всё.</p>\n<p>Если выражение в <code>as</code> даёт <code>never</code>, ключ исчезает из результата. Так фильтруют поля по типу значения: <code>PickByValue&lt;Task, boolean&gt;</code> оставляет только булевы поля. Во фронтенде так выбирают, например, только числовые колонки для агрегатов в таблице или только строковые поля для полнотекстового поиска.</p>\n<div class=\"table-wrap\"><table><thead><tr><th>Синтаксис</th><th>Что делает</th></tr></thead><tbody><tr><td><code>[K in keyof T]: ...</code></td><td>перебирает ключи, сохраняя модификаторы</td></tr><tr><td><code>+?</code>, <code>-?</code></td><td>добавляет или снимает необязательность</td></tr><tr><td><code>+readonly</code>, <code>-readonly</code></td><td>добавляет или снимает readonly</td></tr><tr><td><code>as НовоеИмя</code></td><td>переименовывает ключ</td></tr><tr><td><code>as ... ? K : never</code></td><td>отфильтровывает ключ</td></tr></tbody></table></div>\n<h3>Template literal types: типобезопасные события и пути</h3>\n<p>Template literal types используют тот же синтаксис, что шаблонные строки в JS, но на уровне типов. Подставлять можно строковые, числовые и булевы литералы и их union. Если подставить union, результат — все комбинации: две сущности на два действия дают четыре имени события. Есть и встроенные утилиты для строк: <code>Uppercase</code>, <code>Lowercase</code>, <code>Capitalize</code>, <code>Uncapitalize</code>.</p>\n<pre class=\"code\"><span class=\"c\">// Шаблонные литеральные типы: строки, собранные из других типов</span>\ntype Entity = 'project' | 'task'\ntype Action = 'created' | 'deleted'\ntype EventName = `${Entity}:${Action}`\n<span class=\"c\">// 'project:created' | 'project:deleted' | 'task:created' | 'task:deleted'</span>\n\n<span class=\"c\">// Типобезопасная шина событий</span>\ntype Payloads = {\n  'project:created': { id: number; title: string }\n  'task:deleted': { id: number }\n}\nfunction on&lt;E extends keyof Payloads&gt;(event: E, cb: (p: Payloads[E]) =&gt; void) {}\non('task:deleted', (p) =&gt; p.id)       <span class=\"c\">// p: { id: number }</span>\n<span class=\"c\">// on('task:removed', ...)            // Ошибка: нет такого события</span>\n\n<span class=\"c\">// Пути к вложенным полям: 'user.address.city'</span>\ntype Path&lt;T&gt; = {\n  [K in keyof T &amp; string]: T[K] extends object\n    ? K | `${K}.${Path&lt;T[K]&gt;}`\n    : K\n}[keyof T &amp; string]\n\ninterface Settings { user: { name: string; address: { city: string } }; theme: string }\ntype SettingsPath = Path&lt;Settings&gt;\n<span class=\"c\">// 'user' | 'user.name' | 'user.address' | 'user.address.city' | 'theme'</span></pre>\n<p>Первый практический пример — <b>шина событий</b>. Карта <code>Payloads</code> связывает имя события с формой данных. Функция <code>on&lt;E extends keyof Payloads&gt;</code> принимает только существующее имя, а колбэк получает тип данных именно этого события. Опечатка в имени события или обращение к несуществующему полю данных теперь ошибка компиляции. Так же типизированы <code>defineEmits</code> во Vue и <code>addEventListener</code> в DOM-типах (через карту <code>HTMLElementEventMap</code>).</p>\n<p>Второй пример — <b>пути к вложенным полям</b>: <code>'user.address.city'</code>. Тип <code>Path</code> — это mapped type, который для каждого ключа возвращает либо сам ключ, либо ключ с точкой и путями вложенного объекта, а затем индексом <code>[keyof T &amp; string]</code> собирает значения всех полей в один union. Такие типы используют библиотеки форм (VeeValidate, React Hook Form), i18n и функции вида <code>get(obj, path)</code>.</p>\n<div class=\"note warn\">Цена: число комбинаций растёт как произведение размеров union. Для глубоких и широких моделей Path может дать тысячи строк, замедлить редактор и упереться в лимит около 100 000 членов union. Рекурсию ограничивают по глубине, а для огромных моделей от таких типов отказываются.</div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«Mapped type — это цикл по ключам: [K in keyof T]. Внутри можно менять тип значения и модификаторы, плюс и минус для ? и readonly — так устроены Partial, Required, Readonly. Через as ключи переименовываются, например title в getTitle, а as с never фильтрует ключи. Template literal types собирают строковые типы и перемножают union. Я применяю их для типобезопасной шины событий по карте имя → данные и для путей к полям формы, но слежу за размером union, чтобы не убить производительность редактора.»</div>"
+    },
+    {
+      "title": "Структурная типизация и её ловушки",
+      "html": "\n<p>TypeScript использует <b>структурную</b> типизацию: совместимость типов определяется их формой, а не именем или происхождением. Это главное отличие от Java или C#, где типизация номинальная. Почти все «странные» случаи, которые любят разбирать на senior-собеседовании, следуют из этого принципа: лишние свойства, которые то ловятся, то нет, вариантность функций и необходимость брендированных типов.</p>\n<h3>Форма важнее имени</h3>\n<p>Если у типа <code>Vector</code> есть поля <code>x</code> и <code>y</code> нужных типов, его можно присвоить переменной типа <code>Point</code>, даже если эти интерфейсы никак не связаны. Более того, объект с <b>лишними</b> полями тоже совместим: если функция ждёт <code>{ field: string }</code>, ей подойдёт объект с <code>field</code> и ещё десятью полями. Это естественно для JavaScript, где объекты создаются литералами, а не классами, и удобно: можно передать строку таблицы целиком туда, где нужна только часть полей.</p>\n<pre class=\"code\">interface Column { field: string; width?: number }\n\n<span class=\"c\">// Проверка лишних свойств работает только для «свежего» литерала</span>\nconst c1: Column = { field: 'title', widht: 120 } <span class=\"c\">// Ошибка: опечатка поймана</span>\n\nconst raw = { field: 'title', widht: 120 }\nconst c2: Column = raw  <span class=\"c\">// ОК! Структурно raw подходит, лишнее поле молча игнорируется</span>\n\n<span class=\"c\">// Структурная совместимость: имена типов не важны, важна форма</span>\ninterface Point { x: number; y: number }\ninterface Vector { x: number; y: number }\nconst v: Vector = { x: 1, y: 2 }\nconst p: Point = v      <span class=\"c\">// ОК — формы совпадают</span>\n\n<span class=\"c\">// Слабый тип (все поля опциональны) ловит полностью чужие объекты</span>\ninterface Options { debounce?: number; immediate?: boolean }\nconst opts = { delay: 300 }\n<span class=\"c\">// const o: Options = opts // Ошибка: нет ни одного общего свойства</span></pre>\n<p>Но из-за этого опечатка в необязательном поле (<code>widht</code> вместо <code>width</code>) не была бы ошибкой: объект просто «имеет лишнее поле», а необязательное <code>width</code> отсутствует. Поэтому в TypeScript есть отдельная эвристика — <b>проверка лишних свойств</b> (excess property check). Она срабатывает только для <b>свежего объектного литерала</b>, записанного прямо там, где известен целевой тип: при присваивании, передаче аргумента, возврате из функции. Если объект сначала сохранить в переменную, литерал перестаёт быть свежим, и лишние поля пройдут молча.</p>\n<p>Ещё одна эвристика — проверка <b>слабых типов</b> (weak type detection): если у типа все поля необязательны, присвоить ему объект без единого общего поля нельзя. Это ловит передачу совсем не того объекта в options.</p>\n<div class=\"note warn\">Ловушка на собеседовании: «почему опечатка в литерале ловится, а в переменной нет?» Ответ: проверка лишних свойств — не часть структурной совместимости, а отдельная эвристика для свежих литералов. Спред тоже обходит её частично: { ...base, widht: 1 } проверяется, а поля из base — нет.</div>\n<h3>Вариантность</h3>\n<p>Вариантность отвечает на вопрос: если <code>Dog</code> совместим с <code>Animal</code>, совместим ли <code>Box&lt;Dog&gt;</code> с <code>Box&lt;Animal&gt;</code>? Возможны четыре ответа. <b>Ковариантность</b> — да, в ту же сторону (так ведут себя возвращаемые значения: функция, возвращающая собаку, годится там, где ждут функцию, возвращающую животное). <b>Контравариантность</b> — в обратную сторону (параметры: обработчик любого животного годится там, где ждут обработчик собаки). <b>Инвариантность</b> — только точное совпадение. <b>Бивариантность</b> — в обе стороны, что небезопасно.</p>\n<pre class=\"code\">class Animal { name = '' }\nclass Dog extends Animal { bark() {} }\n\n<span class=\"c\">// Массивы ковариантны — и это дыра в типах</span>\nconst dogs: Dog[] = [new Dog()]\nconst animals: Animal[] = dogs   <span class=\"c\">// разрешено</span>\nanimals.push(new Animal())       <span class=\"c\">// тоже разрешено</span>\ndogs[1].bark()                   <span class=\"c\">// TypeError в рантайме</span>\n\n<span class=\"c\">// Параметры функций контравариантны (strictFunctionTypes)</span>\ntype Handler&lt;T&gt; = (value: T) =&gt; void\nconst handleAnimal: Handler&lt;Animal&gt; = (a) =&gt; console.log(a.name)\nconst h1: Handler&lt;Dog&gt; = handleAnimal    <span class=\"c\">// ОК: умеет любое животное — умеет и собаку</span>\n<span class=\"c\">// const h2: Handler&lt;Animal&gt; = (d: Dog) =&gt; d.bark() // Ошибка</span>\n\n<span class=\"c\">// Но методы, объявленные как метод, бивариантны — проверка слабее</span>\ninterface ListenerMethod { on(value: Animal): void }\ninterface ListenerProp { on: (value: Animal) =&gt; void }\nconst m: ListenerMethod = { on: (d: Dog) =&gt; d.bark() } <span class=\"c\">// ОК (!)</span>\n<span class=\"c\">// const pr: ListenerProp = { on: (d: Dog) =&gt; d.bark() } // Ошибка</span>\n\n<span class=\"c\">// Явные аннотации вариантности (TS 4.7)</span>\ninterface Producer&lt;out T&gt; { get(): T }\ninterface Consumer&lt;in T&gt; { put(v: T): void }</pre>\n<p>В TypeScript есть две намеренные дыры, о которых стоит знать. Первая — <b>массивы ковариантны</b>, хотя в них можно писать. Массив собак присваивается переменной «массив животных», через неё туда кладут обычное животное, и в рантайме у «собаки» нет метода <code>bark</code>. Это компромисс ради удобства: строгая инвариантность массивов сломала бы огромное количество обычного кода. Защита — <code>readonly</code>-массивы в API: из них можно только читать, и ковариантность становится безопасной.</p>\n<p>Вторая — <b>бивариантность методов</b>. Флаг <code>strictFunctionTypes</code> (входит в <code>strict</code>) делает параметры функций контравариантными, но только для свойств-функций (<code>on: (v: Animal) =&gt; void</code>). Методы, объявленные синтаксисом метода (<code>on(v: Animal): void</code>), сознательно остаются бивариантными, иначе не компилировались бы встроенные типы вроде <code>Array</code>. Практический вывод: колбэки в своих интерфейсах объявляйте как свойства-функции. С TS 4.7 у параметров типа можно явно указать вариантность через <code>in</code> и <code>out</code> — это ускоряет проверку и документирует намерение.</p>\n<h3>Branded types и unknown на границах</h3>\n<p>Структурная типизация мешает, когда у значений одинаковая форма, но разный смысл. <code>projectId</code> и <code>userId</code> — оба <code>number</code>, и компилятор не заметит, если вы передадите один вместо другого. Та же история с суммой в рублях и копейках, сырой строкой и проверенным email, обычным HTML и очищенным от XSS.</p>\n<p>Решение — <b>брендированные (номинальные) типы</b>. К базовому типу добавляется пересечение с «фантомным» полем-меткой, которого в рантайме нет. Два бренда с разными метками несовместимы, и обычный <code>number</code> тоже нельзя передать без явного приведения.</p>\n<pre class=\"code\"><span class=\"c\">// Брендированные (номинальные) типы: одинаковая форма, разный смысл</span>\ntype Brand&lt;T, B extends string&gt; = T &amp; { readonly __brand: B }\n\ntype ProjectId = Brand&lt;number, 'ProjectId'&gt;\ntype UserId = Brand&lt;number, 'UserId'&gt;\ntype Email = Brand&lt;string, 'Email'&gt;\n\nfunction getProject(id: ProjectId) {}\n\nconst uid = 5 as UserId\n<span class=\"c\">// getProject(uid)  // Ошибка: UserId не ProjectId</span>\n<span class=\"c\">// getProject(5)    // Ошибка: обычный number тоже нельзя</span>\n\n<span class=\"c\">// Бренд выдаётся только после проверки — «умный конструктор»</span>\nfunction toEmail(value: string): Email {\n  if (!/^[^@\\s]+@[^@\\s]+$/.test(value)) throw new Error('Некорректный email')\n  return value as Email\n}\nfunction sendInvite(to: Email) {}\nsendInvite(toEmail('dev@company.ru')) <span class=\"c\">// гарантированно проверено</span>\n\n<span class=\"c\">// В рантайме бренда нет: это просто number/string, ноль накладных расходов</span></pre>\n<p>Значение с брендом создаётся через <code>as</code>, и правильная практика — делать это в одном месте, в «умном конструкторе», который сначала проверяет значение. Тогда тип <code>Email</code> означает не просто «строка», а «строка, прошедшая проверку», и функции, принимающие <code>Email</code>, могут не проверять её повторно. Бренды бесплатны в рантайме — это всё тот же <code>number</code> или <code>string</code>. Библиотеки валидации (zod с <code>.brand()</code>) умеют выдавать их автоматически.</p>\n<p>На тех же границах системы важен выбор между <code>unknown</code> и <code>any</code>. Всё, что приходит снаружи (ответы API, <code>postMessage</code>, <code>localStorage</code>, параметры URL, ошибки в <code>catch</code>), правильно типизировать как <code>unknown</code>: тогда компилятор заставит проверить данные до использования. Если же функция возвращает <code>any</code>, ошибка расползается по коду без единого предупреждения. Хорошая практика для API-слоя: сырой ответ — <code>unknown</code>, затем валидация, затем точный тип.</p>\n<div class=\"boxes\"><div class=\"box hl\"><b>Структурная типизация</b><span>совместимы типы одинаковой формы; удобно для JS-объектов</span></div><div class=\"box \"><b>Проверка лишних свойств</b><span>только для свежих литералов, это эвристика против опечаток</span></div><div class=\"box bad\"><b>Вариантность</b><span>массивы ковариантны, методы бивариантны — две известные дыры</span></div><div class=\"box good\"><b>Branded types</b><span>номинальность там, где форма одинакова, а смысл разный</span></div></div>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«TypeScript структурный: совместимость определяется формой, поэтому объект с лишними полями подходит. Опечатки в литералах ловит отдельная эвристика — проверка лишних свойств, но только для свежего литерала. Есть известные дыры: ковариантные массивы и бивариантные методы, поэтому колбэки объявляю свойствами-функциями, а в API отдаю readonly-массивы. Когда нужна номинальность, например чтобы не путать ProjectId и UserId, использую branded types с умным конструктором. Внешние данные типизирую как unknown, а не any.»</div>"
+    },
+    {
+      "title": "Конфигурация и типизация на уровне проекта",
+      "html": "\n<p>На senior-уровне спрашивают не только про синтаксис типов, но и про то, как TypeScript настроен в проекте: какие флаги включены и почему, как подключаются типы окружения и библиотек, откуда берутся типы API и что защищает от неправильных данных в рантайме. Это решения, которые принимает ведущий разработчик и которые влияют на всю команду.</p>\n<h3>tsconfig: флаги, которые важны</h3>\n<div class=\"code-label\">tsconfig.app.json</div><pre class=\"code\">{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"bundler\",\n    \"lib\": [\"ES2022\", \"DOM\", \"DOM.Iterable\"],\n\n    \"strict\": true,\n    \"noUncheckedIndexedAccess\": true,\n    \"exactOptionalPropertyTypes\": true,\n    \"noImplicitOverride\": true,\n    \"noFallthroughCasesInSwitch\": true,\n\n    \"verbatimModuleSyntax\": true,\n    \"isolatedModules\": true,\n    \"skipLibCheck\": true,\n    \"noEmit\": true,\n\n    \"jsx\": \"preserve\",\n    \"types\": [\"vite/client\"],\n    \"paths\": { \"@/*\": [\"./src/*\"] }\n  },\n  \"include\": [\"src/**/*.ts\", \"src/**/*.vue\", \"env.d.ts\"]\n}</pre>\n<p><b>strict</b> — это пакет флагов: <code>strictNullChecks</code> (без него <code>null</code> и <code>undefined</code> присваиваются чему угодно, и TypeScript теряет половину пользы), <code>noImplicitAny</code>, <code>strictFunctionTypes</code>, <code>strictPropertyInitialization</code>, <code>useUnknownInCatchVariables</code> и другие. Новые strict-проверки в будущих версиях TS тоже будут включаться этим флагом, поэтому обновление TypeScript может принести новые ошибки — это нормально.</p>\n<p>Важно, что некоторые полезные флаги <b>не входят</b> в strict, потому что ломают много существующего кода. <b>noUncheckedIndexedAccess</b> добавляет <code>undefined</code> к результату обращения по индексу и по ключу словаря. Без него <code>rows[0]</code> из пустого массива имеет тип <code>string</code>, хотя на деле там <code>undefined</code> — классический источник ошибок в таблицах и кэшах. <b>exactOptionalPropertyTypes</b> различает «поля нет» и «поле равно undefined», что важно для PATCH-запросов, где эти два случая значат разное.</p>\n<pre class=\"code\"><span class=\"c\">// Без noUncheckedIndexedAccess</span>\nconst rows: string[] = []\nconst firstRow = rows[0]          <span class=\"c\">// string — но на деле undefined!</span>\nfirstRow.toUpperCase()            <span class=\"c\">// TypeError в рантайме</span>\n\nconst cache: Record&lt;string, number&gt; = {}\ncache['missing'].toFixed()        <span class=\"c\">// то же самое</span>\n\n<span class=\"c\">// С noUncheckedIndexedAccess: true</span>\nconst first = rows[0]             <span class=\"c\">// string | undefined</span>\nif (first) first.toUpperCase()    <span class=\"c\">// обязаны проверить</span>\nconst hit = cache['missing'] ?? 0 <span class=\"c\">// number</span>\n\n<span class=\"c\">// exactOptionalPropertyTypes: «нет поля» и «поле = undefined» различаются</span>\ninterface Filters { search?: string }\n<span class=\"c\">// const f: Filters = { search: undefined } // Ошибка при флаге</span></pre>\n<p><b>moduleResolution: \"bundler\"</b> (TS 5.0) — режим для проектов со сборщиком: поддерживает поле <code>exports</code> в package.json, как Node, но не требует расширений в импортах. Для Vite-проекта это правильный выбор. <b>verbatimModuleSyntax</b> требует писать <code>import type</code> для импортов, которые нужны только как типы: сборщик, обрабатывающий файлы по одному, не знает, тип это или значение, и без явной пометки может оставить импорт, которого нет в рантайме. <b>isolatedModules</b> запрещает конструкции, которые нельзя скомпилировать без информации о других файлах (например, реэкспорт типа без <code>type</code>). <b>skipLibCheck</b> пропускает проверку <code>.d.ts</code> из node_modules и заметно ускоряет проверку. <b>noEmit</b> — потому что JS генерирует Vite, а TypeScript только проверяет.</p>\n<h3>Декларации, d.ts и module augmentation</h3>\n<p>Файлы <code>.d.ts</code> содержат только типы, без кода. Они нужны в трёх случаях: описать глобальные сущности окружения, дополнить типы чужих библиотек и описать библиотеку, у которой нет своих типов (если нет пакета в <code>@types</code>).</p>\n<pre class=\"code\"><span class=\"c\">// ---- env.d.ts (без import/export — объявления глобальные) ----</span>\n<span class=\"c\">/// &lt;reference types=\"vite/client\" /&gt;</span>\ninterface ImportMetaEnv {\n  readonly VITE_API_URL: string\n  readonly VITE_SENTRY_DSN?: string\n}\n\n<span class=\"c\">// ---- src/types/augment.d.ts (есть import — значит файл-модуль) ----</span>\nimport 'vue-router'\ndeclare module 'vue' {\n  interface ComponentCustomProperties {\n    $t: (key: string) =&gt; string          <span class=\"c\">// глобальное свойство в шаблонах</span>\n    $formatMoney: (value: number) =&gt; string\n  }\n}\ndeclare module 'vue-router' {\n  interface RouteMeta {\n    requiresAuth?: boolean               <span class=\"c\">// route.meta.requiresAuth типизирован</span>\n    title: string\n  }\n}\n\n<span class=\"c\">// ---- src/types/shims.d.ts — библиотека без типов ----</span>\ndeclare module 'legacy-chart-lib' {\n  export function draw(el: HTMLElement, data: number[]): void\n}</pre>\n<p>Главная тонкость здесь — <b>глобальный файл против модуля</b>. Файл без единого <code>import</code> или <code>export</code> считается глобальным скриптом: его объявления видны везде, так добавляются переменные окружения в <code>ImportMetaEnv</code> (интерфейс сливается с объявленным в <code>vite/client</code>). Если же в файле есть import или export, он становится модулем, и запись <code>declare module 'vue'</code> работает как <b>расширение</b> (augmentation) существующего модуля — интерфейсы внутри сливаются с оригинальными. В глобальном файле та же запись объявила бы модуль <code>'vue'</code> заново и затёрла бы все его типы: после этого перестают находиться <code>ref</code> и <code>defineComponent</code>. Это частая причина «внезапно сломались все типы Vue».</p>\n<p>Через augmentation во Vue добавляют типы глобальных свойств (<code>$t</code> из i18n, свои плагины) в <code>ComponentCustomProperties</code>, поля <code>meta</code> маршрутов в <code>RouteMeta</code>, а также свои опции и пропсы глобальных компонентов.</p>\n<h3>Типы API: генерация и проверка в рантайме</h3>\n<p>Описывать типы ответов сервера руками — источник рассинхронизации: бэкенд переименовал поле, а фронтенд об этом не знает. Если у API есть машиночитаемая схема, типы <b>генерируют</b>. Для REST это OpenAPI (Swagger) и инструменты вроде <code>openapi-typescript</code> или <code>orval</code>, для GraphQL — GraphQL Code Generator, который по схеме и вашим запросам генерирует типы ответов и даже типизированные composables. Генерацию запускают в CI, и изменение контракта сразу превращается в ошибки компиляции.</p>\n<pre class=\"code\"><span class=\"c\"># Генерация типов из OpenAPI (REST)</span>\nnpx openapi-typescript https://api.example.com/openapi.json -o src/api/schema.d.ts\n\n<span class=\"c\"># Генерация типов из GraphQL-схемы и операций</span>\nnpx graphql-codegen --config codegen.ts\n\n<span class=\"c\"># Проверка типов в CI: tsc не видит .vue, нужен vue-tsc</span>\nnpx vue-tsc --noEmit</pre>\n<p>Но даже идеальные типы не проверяют данные в рантайме. Типы стираются при сборке, и запись <code>as Project</code> после <code>res.json()</code> — обещание, а не проверка. Если сервер пришлёт <code>title: null</code>, компилятор об этом не узнает, а <code>title.toUpperCase()</code> упадёт у пользователя. Для данных, которым нельзя доверять (внешние API, <code>localStorage</code>, параметры URL, <code>postMessage</code>), используют <b>runtime-валидацию</b>.</p>\n<pre class=\"code\">import { z } from 'zod'\n\n<span class=\"c\">// Схема — одна точка правды: и проверка в рантайме, и тип</span>\nconst ProjectSchema = z.object({\n  id: z.number().int(),\n  title: z.string().min(1),\n  status: z.enum(['draft', 'active', 'archived']),\n  deadline: z.string().nullable(),\n})\ntype Project = z.infer&lt;typeof ProjectSchema&gt; <span class=\"c\">// тип выведен из схемы</span>\n\nasync function fetchProject(id: number): Promise&lt;Project&gt; {\n  const res = await fetch(`/api/projects/${id}`)\n  const json: unknown = await res.json()\n  <span class=\"c\">// as Project здесь — обещание, а не проверка</span>\n  const parsed = ProjectSchema.safeParse(json)\n  if (!parsed.success) {\n    console.error(parsed.error.issues)  <span class=\"c\">// сервер прислал не то, что ждали</span>\n    throw new Error('Некорректный ответ API')\n  }\n  return parsed.data                    <span class=\"c\">// Project, проверенный в рантайме</span>\n}</pre>\n<p>Библиотека zod (или valibot, ArkType) описывает схему кодом. Из схемы выводится тип через <code>z.infer</code>, поэтому описание одно, а не два. <code>safeParse</code> проверяет данные и при успехе возвращает их уже с точным типом, а при ошибке — подробный список проблем, который полезно отправлять в мониторинг. Компромисс — размер бандла и время проверки на больших ответах, поэтому часто валидируют на границе только критичные данные или включают строгую проверку в dev и тестах.</p>\n<figure class=\"figure\" style=\"margin:0\"><div class=\"flow\"><div class=\"step \"><b>Схема API</b><span>OpenAPI или GraphQL</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Генерация</b><span>типы в src/api</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step \"><b>Ответ unknown</b><span>данные из сети</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step hl\"><b>Валидация</b><span>zod safeParse</span></div><div class=\"arrow\" aria-hidden=\"true\">→</div><div class=\"step good\"><b>Точный тип</b><span>дальше по приложению</span></div></div><figcaption>Типы описывают контракт, валидация проверяет его в рантайме</figcaption></figure>\n<div class=\"say\"><span class=\"eyebrow\">Как сказать на собеседовании</span>«В проекте включаю strict и дополнительно noUncheckedIndexedAccess. Для Vite — moduleResolution bundler, verbatimModuleSyntax и isolatedModules, noEmit, потому что JS собирает Vite, а типы проверяет vue-tsc в CI. Типы окружения и расширения Vue описываю в d.ts через module augmentation и слежу, чтобы файл с declare module был модулем. Типы API генерирую из OpenAPI или GraphQL-схемы. А поскольку типы стираются в рантайме, внешние данные валидирую схемой zod и вывожу тип из неё.»</div>"
+    }
+  ],
+  "quizVariants": [
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Когда условный тип T extends U ? X : Y распределяется по union?",
+        "options": [
+          "Всегда, если в T подставлен union",
+          "Когда T — «голый» параметр типа и в него приходит union",
+          "Только если справа, в U, тоже стоит union",
+          "Только когда в условии есть infer, иначе тип вычисляется целиком"
+        ],
+        "answer": 1,
+        "explanation": "Распределение срабатывает, если слева от extends стоит параметр типа без обёртки. Тогда условие применяется к каждому члену union по отдельности. Чтобы его выключить, оборачивают обе части в кортеж: [T] extends [U]."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Какой тип получится?",
+        "code": "type ToArray<T> = T extends any ? T[] : never\ntype R = ToArray<string | number>",
+        "options": [
+          "(string | number)[]",
+          "string[] | number[]",
+          "never",
+          "string[] & number[]"
+        ],
+        "answer": 1,
+        "explanation": "T голый, поэтому условие применяется отдельно к string и к number, и результаты объединяются. Вариант (string | number)[] даст запись [T] extends [any]."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Чему равен тип R?",
+        "code": "type IsString<T> = T extends string ? true : false\ntype R = IsString<never>",
+        "options": [
+          "true",
+          "false",
+          "never",
+          "boolean"
+        ],
+        "answer": 2,
+        "explanation": "never — пустой union. Распределение по пустому union даёт пустой результат, то есть never. Поэтому IsNever пишут как [T] extends [never]."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что делает конструкция as внутри mapped type?",
+        "options": [
+          "Приводит тип значения каждого поля к указанному",
+          "Переименовывает или отфильтровывает ключи",
+          "Делает поля readonly, как модификатор перед ключом",
+          "Ничего, это синтаксический сахар для keyof"
+        ],
+        "answer": 1,
+        "explanation": "Key remapping (TS 4.1): новое имя ключа вычисляется из K, а never в as выкидывает ключ. Так можно построить ключи вида getTitle из title через шаблонные типы, а условием с never удалить ненужные ключи, например все не-boolean поля."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Какой тип у поля avatar в результате?",
+        "code": "type User = { readonly id: number; avatar?: string }\ntype T = { -readonly [K in keyof User]-?: User[K] }",
+        "options": [
+          "avatar?: string",
+          "avatar: string",
+          "avatar: string | undefined (обязательное)",
+          "readonly avatar: string"
+        ],
+        "answer": 1,
+        "explanation": "Модификатор -? убирает необязательность и вместе с ней undefined, добавленный знаком вопроса. -readonly снимает readonly. Так устроены встроенные Required и самописный Mutable."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Сколько членов в union EventName?",
+        "code": "type Entity = 'project' | 'task' | 'user'\ntype Action = 'created' | 'deleted'\ntype EventName = `${Entity}:${Action}`",
+        "options": [
+          "2",
+          "3",
+          "5",
+          "6"
+        ],
+        "answer": 3,
+        "explanation": "Шаблонный литеральный тип перемножает union: каждая сущность с каждым действием, 3 × 2 = 6. При больших union это быстро раздувает тип, у компилятора есть лимит около 100 000 членов."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Когда TypeScript проверяет лишние свойства объекта (excess property check)?",
+        "options": [
+          "При любом присваивании объекта переменной",
+          "Только для свежего объектного литерала",
+          "Только в strict-режиме и только для классов",
+          "Никогда, типизация структурная"
+        ],
+        "answer": 1,
+        "explanation": "Проверка срабатывает, только когда свежий объектный литерал присваивается прямо в место с известным типом. Если объект сначала сохранить в переменную, а потом присвоить, лишние поля пройдут молча: по структуре объект подходит. Проверка свежих литералов — эвристика для поиска опечаток."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Что такое branded type и сколько он стоит в рантайме?",
+        "options": [
+          "Класс-обёртка, создаёт объект на каждое значение",
+          "Пересечение с фантомной меткой, рантайм не затрагивает",
+          "Специальный тип из lib.dom для идентификаторов",
+          "Тип, который проверяется в рантайме через instanceof при присваивании"
+        ],
+        "answer": 1,
+        "explanation": "Branded type — пересечение базового типа с фантомным полем-меткой; в рантайме он ничего не стоит, значение остаётся обычным number или string. TypeScript структурный, и два number-идентификатора неразличимы. Фантомное поле __brand делает их несовместимыми на уровне типов, а значение получают через as в функции-конструкторе после проверки."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Какое присваивание скомпилируется?",
+        "code": "class Animal { name = '' }\nclass Dog extends Animal { bark() {} }\ninterface A { on(v: Animal): void }\ninterface B { on: (v: Animal) => void }\nconst a: A = { on: (d: Dog) => d.bark() }\nconst b: B = { on: (d: Dog) => d.bark() }",
+        "options": [
+          "Оба: параметр колбэка можно сузить до подкласса",
+          "Только a: параметры методов проверяются бивариантно",
+          "Только b: свойство-функция проверяется мягче метода",
+          "Ни одно: параметр нельзя сузить с Animal до Dog"
+        ],
+        "answer": 1,
+        "explanation": "Параметры методов проверяются бивариантно, а у свойства-функции — контравариантно. strictFunctionTypes делает параметры функций контравариантными, но сознательно не трогает методы (иначе ломались бы встроенные типы вроде Array). Поэтому в своих интерфейсах надёжнее объявлять колбэки свойством-функцией."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что делает флаг noUncheckedIndexedAccess?",
+        "options": [
+          "Запрещает обращение к массивам по индексу",
+          "Добавляет undefined к типу обращения по индексу",
+          "Отключает проверку типов у элементов массивов",
+          "Проверяет границы массива в рантайме и бросает ошибку"
+        ],
+        "answer": 1,
+        "explanation": "Флаг добавляет undefined к результату обращения по индексу и по ключу Record, заставляя проверять наличие. Без флага rows[0] имеет тип string, даже если массив пуст. С флагом — string | undefined. Он не входит в strict, поэтому его включают отдельно."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Почему as Project после res.json() не защищает от неправильного ответа сервера?",
+        "options": [
+          "Потому что as работает только с классами, а не с интерфейсами",
+          "Потому что типы стираются: as — указание, а не проверка",
+          "Потому что json() возвращает строку, а не объект",
+          "as защищает, если включён strict: тогда приведение проверяется"
+        ],
+        "answer": 1,
+        "explanation": "После компиляции от типов не остаётся ничего: as — указание компилятору, а не проверка. Проверить данные в рантайме может только код, например схема zod. Данные из сети, localStorage или URL нужно валидировать кодом, а тип выводить из схемы (z.infer), чтобы не описывать его дважды."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Что выведет код, если сервер вернул { \"id\": 1, \"title\": null }?",
+        "code": "interface Project { id: number; title: string }\nconst p = (await res.json()) as Project\nconsole.log(p.title.toUpperCase())",
+        "options": [
+          "Ошибка компиляции: title может быть null",
+          "TypeError: Cannot read properties of null",
+          "Выведет NULL: null приводится к строке",
+          "Выведет пустую строку вместо null"
+        ],
+        "answer": 1,
+        "explanation": "Компилятор доверяет as и считает title строкой, но в рантайме там null. Это классический пример, почему внешние данные проверяют схемой, а не приведением типа."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Что означает extends в записи T extends U ? X : Y?",
+        "options": [
+          "Что T явно объявлен как наследник класса или интерфейса U",
+          "Что T и U в точности совпадают как типы",
+          "Что значение типа T можно присвоить переменной типа U",
+          "Что U — подтип T, то есть U уже, чем T"
+        ],
+        "answer": 2,
+        "explanation": "В условном типе extends означает совместимость по присваиванию, а не наследование: структурно подходящий тип проходит проверку без extends в объявлении. Точное совпадение не требуется — 'a' extends string истинно."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Какой тип у R?",
+        "code": "type MyAwaited<T> = T extends Promise<infer V> ? MyAwaited<V> : T\ntype R = MyAwaited<Promise<Promise<string>>>",
+        "options": [
+          "string",
+          "Promise<string>",
+          "Promise<Promise<string>>",
+          "never"
+        ],
+        "answer": 0,
+        "explanation": "Тип рекурсивно вызывает себя, пока в нём есть промис, и снимает все обёртки. Promise<string> получился бы без рекурсии — если бы в ветке «да» стояло просто V."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Какой тип у R?",
+        "code": "type R = Extract<string | number | (() => void), Function>",
+        "options": [
+          "never",
+          "string | number",
+          "Function",
+          "() => void"
+        ],
+        "answer": 3,
+        "explanation": "Extract — распределённый условный тип T extends U ? T : never: проверка идёт по каждому члену union, и остаются только совместимые с Function. Результат — сам член () => void, а не тип Function."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что значит, что mapped type по keyof T гомоморфный?",
+        "options": [
+          "Он всегда делает все поля результата обязательными",
+          "Он сохраняет модификаторы ? и readonly исходных полей",
+          "Он работает только с interface, но не с type",
+          "Он снимает readonly со всех полей исходного типа"
+        ],
+        "answer": 1,
+        "explanation": "Цикл [K in keyof T] переносит модификаторы исходных полей: необязательное поле останется необязательным, readonly — readonly. Поэтому FormState<Pick<Task, 'title' | 'dueAt'>> сохраняет dueAt необязательным без лишнего кода."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Какие ключи будут у TaskGetters?",
+        "code": "type Getters<T> = {\n  [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K]\n}\ntype TaskGetters = Getters<{ id: number; title: string }>",
+        "options": [
+          "'id' | 'title'",
+          "'getid' | 'gettitle'",
+          "'getId' | 'getTitle'",
+          "'getId' | 'getTitle' | 'id' | 'title'"
+        ],
+        "answer": 2,
+        "explanation": "as переименовывает каждый ключ: Capitalize делает первую букву заглавной, а шаблонный тип добавляет префикс get. Исходные ключи не сохраняются — as заменяет имя, а не добавляет новое."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Какое присваивание вызовет ошибку?",
+        "code": "type Size = `${number}px`",
+        "options": [
+          "const a: Size = '12px'",
+          "const b: Size = '1.5px'",
+          "const c: Size = '-4px'",
+          "const d: Size = 'px'"
+        ],
+        "answer": 3,
+        "explanation": "${number} принимает любую строку, которая разбирается как число, включая дробные и отрицательные. Пустая строка числом не считается, поэтому 'px' — ошибка."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Почему значение типа Vector можно присвоить переменной типа Point, если интерфейсы никак не связаны?",
+        "options": [
+          "TypeScript сравнивает форму типов, а не их имена",
+          "Интерфейсы с одинаковыми полями сливаются в один",
+          "Совместимость интерфейсов вообще не проверяется",
+          "Это работает только при выключенном strict"
+        ],
+        "answer": 0,
+        "explanation": "Типизация в TypeScript структурная: совместимость определяется набором полей и их типов. Слияние объявлений бывает только у интерфейсов с одним и тем же именем."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Зачем в публичных API отдавать readonly-массивы (readonly T[])?",
+        "options": [
+          "Они работают заметно быстрее обычных массивов в рантайме",
+          "Без записи ковариантность массивов становится безопасной",
+          "Они замораживают массив через Object.freeze",
+          "Только их можно передавать в computed и watch"
+        ],
+        "answer": 1,
+        "explanation": "Обычные массивы ковариантны, и через ссылку Animal[] в Dog[] можно положить не собаку. Из readonly-массива можно только читать, поэтому такая ковариантность безопасна; в рантайме readonly ничего не замораживает."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Что сообщит компилятор?",
+        "code": "interface Options { debounce?: number; immediate?: boolean }\nconst opts = { delay: 300 }\nconst o: Options = opts",
+        "options": [
+          "Ничего: литерал не свежий, лишние поля не проверяются",
+          "Ничего: все поля необязательны, подойдёт любой объект",
+          "Ошибку: в opts не хватает поля debounce",
+          "Ошибку: нет ни одного общего свойства с Options"
+        ],
+        "answer": 3,
+        "explanation": "Срабатывает проверка слабых типов: если все поля типа необязательны, объект без единого общего свойства не присваивается. Проверка лишних свойств тут ни при чём — литерал уже не свежий."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Почему для Vite-проекта выбирают moduleResolution: \"bundler\"?",
+        "options": [
+          "Ищет модули только в папке node_modules самого проекта",
+          "Заставляет писать расширение .js в каждом импорте",
+          "Понимает exports в package.json, расширения не нужны",
+          "Отключает разрешение путей, его берёт на себя Vite"
+        ],
+        "answer": 2,
+        "explanation": "Режим bundler (TS 5.0) понимает поле exports, как Node, но, как сборщик, разрешает импорты без расширений. Обязательные расширения — особенность режима nodenext."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Почему в CI типы Vue-проекта проверяют через vue-tsc, а не через tsc?",
+        "options": [
+          "vue-tsc генерирует JavaScript заметно быстрее, чем tsc",
+          "tsc не умеет разбирать однофайловые компоненты .vue",
+          "tsc не поддерживает strict-режим для Vue-проектов",
+          "vue-tsc работает без файла tsconfig.json"
+        ],
+        "answer": 1,
+        "explanation": "tsc видит только .ts-файлы и пропускает шаблоны и script setup в .vue. vue-tsc — обёртка над tsc, которая понимает SFC; с --noEmit он только проверяет, а JS по-прежнему собирает Vite."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Что скажет компилятор при exactOptionalPropertyTypes: true?",
+        "code": "interface Filters { search?: string }\nconst f: Filters = { search: undefined }",
+        "options": [
+          "Ошибку: undefined нельзя явно записать в search",
+          "Ничего: необязательное поле всегда допускает undefined",
+          "Ошибку: при этом флаге search становится обязательным",
+          "Ничего, но поле search удалится из объекта"
+        ],
+        "answer": 0,
+        "explanation": "С флагом «поля нет» и «поле равно undefined» — разные состояния, и search?: string допускает только отсутствие или строку. Чтобы разрешить undefined явно, пишут search?: string | undefined."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Где можно использовать ключевое слово infer?",
+        "options": [
+          "В любом месте объявления type или interface",
+          "Только в параметрах обобщённых функций",
+          "Только в mapped types после ключевого слова as",
+          "Только в части extends условного типа"
+        ],
+        "answer": 3,
+        "explanation": "infer объявляет переменную типа внутри образца в части extends условного типа, и она доступна в ветке «да». Вне условного типа запись infer — синтаксическая ошибка."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Чему равен тип R?",
+        "code": "type IsString<T> = T extends string ? true : false\ntype R = IsString<string | number>",
+        "options": [
+          "true",
+          "false",
+          "boolean",
+          "never"
+        ],
+        "answer": 2,
+        "explanation": "Условие распределяется: для string получается true, для number — false, а union true | false и есть boolean. Ответ false дала бы запись [T] extends [string]."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Какой тип получится?",
+        "code": "type Params<S extends string> =\n  S extends `${string}:${infer P}/${infer Rest}`\n    ? P | Params<`/${Rest}`>\n    : S extends `${string}:${infer P}` ? P : never\ntype R = Params<'/users/:userId/posts/:postId'>",
+        "options": [
+          "'userId' | 'postId'",
+          "'users' | 'posts'",
+          "'userId' | 'posts/:postId'",
+          "string"
+        ],
+        "answer": 0,
+        "explanation": "Образец «что угодно, двоеточие, P, слэш, остаток» достаёт первое имя параметра, а рекурсия на остатке — следующее. Статические сегменты users и posts не стоят после двоеточия и в результат не попадают."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Зачем в шаблонном ключе пишут Capitalize<string & K>, а не просто Capitalize<K>?",
+        "options": [
+          "Без пересечения ключи станут необязательными",
+          "Ключи бывают number и symbol, а нужен string",
+          "Так ключи результата сортируются по алфавиту",
+          "Пересечение со string снимает с ключей readonly"
+        ],
+        "answer": 1,
+        "explanation": "keyof T даёт string | number | symbol, а Capitalize и шаблонные типы принимают только строковые (символ в шаблон не подставить). Пересечение string & K оставляет только строковые ключи."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Какой тип у R?",
+        "code": "type PickByValue<T, V> = {\n  [K in keyof T as T[K] extends V ? K : never]: T[K]\n}\ninterface Task { id: number; title: string; done: boolean; archived: boolean }\ntype R = PickByValue<Task, boolean>",
+        "options": [
+          "{ done: boolean }",
+          "{ id: never; title: never; done: boolean; archived: boolean }",
+          "{ id: number; title: string }",
+          "{ done: boolean; archived: boolean }"
+        ],
+        "answer": 3,
+        "explanation": "Выражение в as даёт never для полей с неподходящим типом значения, и такие ключи исчезают из результата, а не получают тип never. Остаются все булевы поля."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Какой тип у EventProp?",
+        "code": "type EventProp = `on${Capitalize<'click' | 'focus'>}`",
+        "options": [
+          "'onclick' | 'onfocus'",
+          "'onClick' | 'onFocus'",
+          "'onClickFocus' | 'onFocusClick'",
+          "`on${string}`"
+        ],
+        "answer": 1,
+        "explanation": "Capitalize применяется к каждому члену union, а шаблонный тип подставляет их по очереди. Строки не склеиваются между собой: получается union из двух имён."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "В каком случае сработает проверка лишних свойств?",
+        "options": [
+          "Объект сохранён в переменную, а затем передан в функцию",
+          "Результат JSON.parse присвоен типизированной переменной",
+          "Литерал с лишним полем передан сразу аргументом функции",
+          "Объект с лишним полем возвращён из функции с типом any"
+        ],
+        "answer": 2,
+        "explanation": "Проверка касается свежего литерала в любом месте с известным типом: присваивание, аргумент, возврат из функции. Объект из переменной или из any уже не свежий, и лишние поля пройдут молча."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Зачем указывать in и out у параметров типа, например interface Producer<out T>?",
+        "options": [
+          "Явно задать вариантность: быстрее проверка и яснее код",
+          "Сделать параметр типа необязательным при использовании",
+          "Включить проверку типа T в рантайме при вызове методов",
+          "Запретить использовать T в сигнатурах методов интерфейса"
+        ],
+        "answer": 0,
+        "explanation": "Аннотации вариантности (TS 4.7) говорят, что T только выдаётся (out, ковариантность) или только принимается (in, контравариантность). Компилятору не нужно вычислять вариантность по структуре, а читателю — догадываться о ней."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Что произойдёт при выполнении кода?",
+        "code": "class Animal { name = '' }\nclass Dog extends Animal { bark() {} }\nconst dogs: Dog[] = [new Dog()]\nconst animals: Animal[] = dogs\nanimals.push(new Animal())\ndogs[1].bark()",
+        "options": [
+          "Ошибка компиляции в строке с const animals: Animal[]",
+          "TypeError в рантайме: bark is not a function",
+          "Ошибка компиляции в строке animals.push",
+          "Код отработает: Animal приведётся к Dog"
+        ],
+        "answer": 1,
+        "explanation": "Массивы в TypeScript ковариантны, хотя в них можно писать: компилятор разрешает и присваивание, и push. В рантайме dogs[1] — обычный Animal без метода bark."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что требует флаг verbatimModuleSyntax?",
+        "options": [
+          "Указывать расширение .js в каждом относительном импорте модуля",
+          "Использовать только CommonJS-синтаксис require",
+          "Импортировать типы только из файлов .d.ts",
+          "Писать import type для импортов, нужных только как типы"
+        ],
+        "answer": 3,
+        "explanation": "Сборщик обрабатывает файлы по одному и не знает, тип импортирован или значение. Явная пометка type позволяет удалить такой импорт целиком, а обычный import остаётся в JS как есть."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Как надёжнее всего держать типы ответов REST API в синхроне с бэкендом?",
+        "options": [
+          "Описывать интерфейсы руками и сверять их на ревью",
+          "Типизировать ответы как any, пока не появятся ошибки",
+          "Генерировать типы из OpenAPI-схемы, в том числе в CI",
+          "Копировать типы из DTO бэкенда при каждом релизе"
+        ],
+        "answer": 2,
+        "explanation": "Генерация (openapi-typescript, orval) берёт машиночитаемую схему, и изменение контракта сразу превращается в ошибку компиляции. Ручные интерфейсы и копирование расходятся с бэкендом незаметно."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "После добавления файла импорты ref и defineComponent из vue перестали находиться. В чём причина?",
+        "code": "// src/types/globals.d.ts\ndeclare module 'vue' {\n  interface ComponentCustomProperties {\n    $t: (key: string) => string\n  }\n}",
+        "options": [
+          "В файле нет import/export, и он заново объявил модуль vue",
+          "Нужно перезапустить TS-сервер, кэш типов устарел",
+          "ComponentCustomProperties нельзя расширять в .d.ts",
+          "Расширение нужно было написать через type, а не interface"
+        ],
+        "answer": 0,
+        "explanation": "Без import или export файл глобальный, и declare module 'vue' в нём объявляет модуль заново вместо расширения, затирая все его типы. Достаточно добавить, например, export {}, чтобы файл стал модулем."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Что происходит с условным типом T extends string ? A : B внутри обобщённой функции, пока T неизвестен?",
+        "options": [
+          "Он сразу вычисляется в ветку B, раз T может быть любым",
+          "Вычисление откладывается до подстановки конкретного T",
+          "Он сразу превращается в union обеих веток A | B",
+          "Компилятор выдаёт ошибку: T ещё не определён"
+        ],
+        "answer": 1,
+        "explanation": "Пока T — неизвестный параметр, условие нельзя проверить, и тип остаётся отложенным. Он вычисляется в момент подстановки конкретного типа, например при вызове функции."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Чему равен тип R?",
+        "code": "type FirstNum<T> = T extends [infer N extends number, ...unknown[]] ? N : never\ntype R = FirstNum<['a', 1]>",
+        "options": [
+          "1",
+          "'a'",
+          "number",
+          "never"
+        ],
+        "answer": 3,
+        "explanation": "infer N extends number сопоставляется с первым элементом кортежа и требует, чтобы он был совместим с number. 'a' не подходит, поэтому выбирается ветка «нет» — never; дальше по кортежу поиск не идёт."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Чему равен тип R?",
+        "code": "type Head<S extends string> = S extends `${infer H}/${string}` ? H : S\ntype R = Head<'api/v1/users'>",
+        "options": [
+          "'api'",
+          "'api/v1'",
+          "'api/v1/users'",
+          "string"
+        ],
+        "answer": 0,
+        "explanation": "Переменная infer перед буквальным символом захватывает строку до первого его вхождения, поэтому H — 'api'. Остаток 'v1/users' уходит в ${string}."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Что встроенный Readonly<T> делает с вложенными объектами?",
+        "options": [
+          "Делает readonly все поля на любой глубине вложенности",
+          "Замораживает объект через Object.freeze",
+          "Помечает readonly только поля верхнего уровня",
+          "Делает вложенные объекты необязательными"
+        ],
+        "answer": 2,
+        "explanation": "Readonly — mapped type с модификатором readonly на один уровень: поля вложенного объекта остаются изменяемыми. Для глубокой защиты пишут рекурсивный DeepReadonly, а в рантайме Readonly ничего не замораживает."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Какой строки нет в union SettingsPath?",
+        "code": "type Path<T> = {\n  [K in keyof T & string]: T[K] extends object\n    ? K | `${K}.${Path<T[K]>}`\n    : K\n}[keyof T & string]\ninterface Settings { user: { name: string; address: { city: string } }; theme: string }\ntype SettingsPath = Path<Settings>",
+        "options": [
+          "'user.address'",
+          "'address.city'",
+          "'user.address.city'",
+          "'theme'"
+        ],
+        "answer": 1,
+        "explanation": "Path строит пути от корня: для каждого ключа — сам ключ и ключ с точкой плюс вложенные пути. Путь 'address.city' не начинается с ключа верхнего уровня, а промежуточный 'user.address' в union входит."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Чему эквивалентен тип Flags?",
+        "code": "type Flags = { [K in 'dark' | 'compact']: boolean }",
+        "options": [
+          "{ dark?: boolean; compact?: boolean }",
+          "{ [key: string]: boolean }",
+          "readonly ['dark', 'compact']",
+          "Record<'dark' | 'compact', boolean>"
+        ],
+        "answer": 3,
+        "explanation": "Mapped type может перебирать любой union ключей, не только keyof T; встроенный Record<K, V> устроен именно так. Модификаторов в записи нет, поэтому поля обязательные."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Где правильно приводить значение к брендированному типу через as?",
+        "options": [
+          "В одной функции-конструкторе после проверки значения",
+          "В каждом месте использования, где нужен бренд",
+          "Нигде: бренд компилятор выводит сам по проверкам в коде",
+          "Только в .d.ts-файлах, чтобы не попасть в рантайм"
+        ],
+        "answer": 0,
+        "explanation": "Умный конструктор сначала проверяет значение и только потом приводит его к бренду. Тогда Email означает «строка, прошедшая проверку», а разбросанные по коду as превращают бренд в пустое обещание."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Почему данные из postMessage или localStorage лучше типизировать как unknown, а не any?",
+        "options": [
+          "unknown быстрее проверяется компилятором, чем any",
+          "any запрещён в strict-режиме, а unknown разрешён",
+          "unknown заставляет проверить данные перед использованием",
+          "unknown автоматически валидирует данные в рантайме"
+        ],
+        "answer": 2,
+        "explanation": "С unknown нельзя обратиться к полю или вызвать метод без сужения, поэтому проверка обязательна. any отключает проверки, и ошибка расползается по коду; strict явный any не запрещает, а лишь ловит неявный."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Что сообщит компилятор?",
+        "code": "interface Column { field: string; width?: number }\nconst base = { field: 'title', sortable: true }\nconst col: Column = { ...base, widht: 120 }",
+        "options": [
+          "Ничего: со спредом литерал не проверяется",
+          "Ошибки про sortable и про widht",
+          "Ошибку только про sortable",
+          "Ошибку только про widht"
+        ],
+        "answer": 3,
+        "explanation": "Явно записанные в литерале поля проходят проверку лишних свойств, поэтому опечатка widht поймана. Поля, пришедшие из base через спред, не проверяются, и sortable пройдёт молча."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что делает флаг skipLibCheck?",
+        "options": [
+          "Не подключает типы библиотек из пакетов @types",
+          "Не проверяет файлы деклараций .d.ts, ускоряя проверку",
+          "Запрещает импорт библиотек, у которых нет типов",
+          "Отключает проверку типов во всём проекте"
+        ],
+        "answer": 1,
+        "explanation": "Флаг пропускает проверку файлов деклараций, прежде всего из node_modules, и заметно ускоряет tsc. Типы библиотек при этом подключаются и используются как обычно."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Какой интерфейс расширить, чтобы $t был типизирован в шаблонах Vue?",
+        "options": [
+          "RouteMeta в модуле 'vue-router'",
+          "ImportMetaEnv в файле env.d.ts",
+          "HTMLElementEventMap из lib.dom",
+          "ComponentCustomProperties в модуле 'vue'"
+        ],
+        "answer": 3,
+        "explanation": "Глобальные свойства экземпляра ($t, свои плагины) описывают в ComponentCustomProperties через module augmentation. RouteMeta отвечает за route.meta, ImportMetaEnv — за переменные окружения."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Что выведет код?",
+        "code": "import { z } from 'zod'\nconst ProjectSchema = z.object({ id: z.number(), title: z.string() })\nconst result = ProjectSchema.safeParse({ id: 1, title: null })\nconsole.log(result.success)",
+        "options": [
+          "true",
+          "undefined",
+          "false",
+          "Бросит ZodError, вывода не будет"
+        ],
+        "answer": 2,
+        "explanation": "safeParse не бросает исключение: при ошибке он возвращает объект с success: false и списком проблем в error. Исключение бросает parse."
+      }
+    ],
+    [
+      {
+        "topic": 0,
+        "type": "theory",
+        "question": "Как проверить, что сложный вычисляемый тип работает как задумано?",
+        "options": [
+          "Тестами типов: expectTypeOf или @ts-expect-error",
+          "Юнит-тестами: они проверяют типы в рантайме",
+          "Включить strict: он покажет ошибки в логике типа",
+          "Посмотреть, во что тип превратился в JS-бандле"
+        ],
+        "answer": 0,
+        "explanation": "Типы стираются при сборке, поэтому их проверяют на этапе компиляции: expectTypeOf в Vitest или строкой с @ts-expect-error, которая сама станет ошибкой, если ожидаемой ошибки нет. strict ловит другие проблемы, а не логику вычисляемого типа."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Чему равен тип R?",
+        "code": "type MyReturnType<F> = F extends (...args: any[]) => infer R ? R : never\ntype R = MyReturnType<() => Promise<number>>",
+        "options": [
+          "number",
+          "() => Promise<number>",
+          "Promise<number>",
+          "never"
+        ],
+        "answer": 2,
+        "explanation": "infer R достаёт возвращаемый тип функции как есть, промис не разворачивается. Чтобы получить number, результат дополнительно оборачивают в Awaited."
+      },
+      {
+        "topic": 0,
+        "type": "practice",
+        "question": "Чему равен тип R?",
+        "code": "type Values<T> = T extends { a: infer U; b: infer U } ? U : never\ntype R = Values<{ a: string; b: number }>",
+        "options": [
+          "string",
+          "string | number",
+          "[string, number]",
+          "string & number"
+        ],
+        "answer": 1,
+        "explanation": "Если одна переменная infer встречается в нескольких ковариантных позициях, кандидаты объединяются в union. Пересечение string & number (то есть never) получается для кандидатов в контравариантных позициях, например в параметрах функций."
+      },
+      {
+        "topic": 1,
+        "type": "theory",
+        "question": "Какие утилиты для строковых литеральных типов встроены в TypeScript?",
+        "options": [
+          "Trim, Split, Join, Replace, StartsWith, EndsWith",
+          "CamelCase, KebabCase, SnakeCase, PascalCase",
+          "Prefix, Suffix, Concat, Repeat",
+          "Uppercase, Lowercase, Capitalize, Uncapitalize"
+        ],
+        "answer": 3,
+        "explanation": "Встроены четыре внутренние (intrinsic) утилиты, меняющие регистр. Trim, Split или CamelCase пишут сами через шаблонные типы и infer или берут из библиотек вроде type-fest."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Что сообщит компилятор?",
+        "code": "type Payloads = {\n  'project:created': { id: number; title: string }\n  'task:deleted': { id: number }\n}\ndeclare function on<E extends keyof Payloads>(\n  event: E, cb: (p: Payloads[E]) => void\n): void\non('task:deleted', (p) => console.log(p.title))",
+        "options": [
+          "Ошибку: у { id: number } нет поля title",
+          "Ничего: p — объединение данных всех событий",
+          "Ничего: параметр p неявно получит тип any",
+          "Ошибку: 'task:deleted' не подходит под keyof"
+        ],
+        "answer": 0,
+        "explanation": "E выводится как 'task:deleted', и колбэк получает Payloads['task:deleted'], то есть { id: number }. Даже union данных не помог бы: обращаться к полю, которого нет в одном из членов, нельзя."
+      },
+      {
+        "topic": 1,
+        "type": "practice",
+        "question": "Какой тип у Setters?",
+        "code": "interface Task { id: number; title: string }\ntype Setters = {\n  [K in keyof Task]: `set${Capitalize<K>}`\n}[keyof Task]",
+        "options": [
+          "{ id: 'setId'; title: 'setTitle' }",
+          "'id' | 'title'",
+          "'setId' | 'setTitle'",
+          "'setId' & 'setTitle'"
+        ],
+        "answer": 2,
+        "explanation": "Mapped type строит объект «ключ → строка», а индекс [keyof Task] собирает значения всех полей в union. Тот же приём лежит в основе типа Path."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "type Handler<T> = (value: T) => void. Почему Handler<Animal> можно присвоить переменной типа Handler<Dog>, а наоборот нельзя?",
+        "options": [
+          "Параметры ковариантны: собака — частный случай животного, это безопасно",
+          "Параметры контравариантны: обработчик животного примет и собаку",
+          "Функции бивариантны, а запрет — особенность классов",
+          "Так работает только с классами, у интерфейсов наоборот"
+        ],
+        "answer": 1,
+        "explanation": "При strictFunctionTypes параметры свойств-функций проверяются контравариантно. Обработчик собаки может вызвать bark, а Handler<Animal> передал бы ему любое животное, поэтому обратное присваивание запрещено."
+      },
+      {
+        "topic": 2,
+        "type": "theory",
+        "question": "Как проверяется совместимость возвращаемых значений функций?",
+        "options": [
+          "Контравариантно: () => Animal подходит вместо () => Dog",
+          "Инвариантно: тип результата должен совпасть точно",
+          "Никак: возвращаемый тип в совместимости не участвует",
+          "Ковариантно: () => Dog подходит вместо () => Animal"
+        ],
+        "answer": 3,
+        "explanation": "Возвращаемое значение только выдаётся наружу, поэтому работает ковариантность: кто ждёт животное, получит собаку и будет работать с ней как с животным. Обратное небезопасно — от () => Animal нельзя ждать bark."
+      },
+      {
+        "topic": 2,
+        "type": "practice",
+        "question": "Какой вызов скомпилируется?",
+        "code": "type Brand<T, B extends string> = T & { readonly __brand: B }\ntype ProjectId = Brand<number, 'ProjectId'>\ntype UserId = Brand<number, 'UserId'>\ndeclare function getProject(id: ProjectId): void\ndeclare const uid: UserId",
+        "options": [
+          "getProject(5)",
+          "getProject(uid satisfies UserId)",
+          "getProject(5 as ProjectId)",
+          "getProject(Number('5'))"
+        ],
+        "answer": 2,
+        "explanation": "Обычный number не содержит метки __brand, а метки 'UserId' и 'ProjectId' несовместимы. satisfies тип значения не меняет, uid остаётся UserId. Бренд выдаётся только явным as — в идеале в умном конструкторе после проверки."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Что включает флаг strict?",
+        "options": [
+          "Набор флагов: strictNullChecks, noImplicitAny и другие",
+          "Только проверку null и undefined через strictNullChecks",
+          "Все проверки, включая noUncheckedIndexedAccess",
+          "Только запрет неявного any в параметрах функций"
+        ],
+        "answer": 0,
+        "explanation": "strict — набор флагов: strictNullChecks, noImplicitAny, strictFunctionTypes, useUnknownInCatchVariables и другие; новые strict-проверки будущих версий TS тоже войдут в него. noUncheckedIndexedAccess и exactOptionalPropertyTypes в strict не входят."
+      },
+      {
+        "topic": 3,
+        "type": "theory",
+        "question": "Зачем в tsconfig Vite-проекта стоит noEmit: true?",
+        "options": [
+          "Чтобы не генерировать source maps в продакшене",
+          "JS собирает Vite, а TypeScript только проверяет типы",
+          "Чтобы TypeScript не проверял файлы .vue",
+          "Так отключаются ошибки типов при сборке"
+        ],
+        "answer": 1,
+        "explanation": "Vite транспилирует TypeScript сам и без проверки типов, поэтому tsc или vue-tsc нужны только как проверка. noEmit не даёт им записывать лишние JS-файлы."
+      },
+      {
+        "topic": 3,
+        "type": "practice",
+        "question": "Что сообщит компилятор?",
+        "code": "// src/types/router.d.ts\nimport 'vue-router'\ndeclare module 'vue-router' {\n  interface RouteMeta { title: string; requiresAuth?: boolean }\n}\n\n// router.ts\nconst routes: RouteRecordRaw[] = [\n  { path: '/admin', component: Admin, meta: { requiresAuth: true } },\n]",
+        "options": [
+          "Ничего: поле meta маршрутов не типизируется",
+          "Ошибку: declare module затёр типы vue-router",
+          "Ничего: RouteMeta проверяется только в рантайме",
+          "Ошибку: в meta нет обязательного поля title"
+        ],
+        "answer": 3,
+        "explanation": "Файл с import — модуль, поэтому запись расширяет RouteMeta, а не объявляет vue-router заново. Раз title обязателен, его должен указать каждый маршрут, у которого есть meta."
+      }
+    ]
+  ]
+}

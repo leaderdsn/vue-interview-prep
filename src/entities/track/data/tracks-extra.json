@@ -281,7 +281,7 @@
           "Эффекты и рефы: useEffect, зависимости, очистка, useRef"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "free",
         "taskCount": 0
       },
@@ -296,7 +296,7 @@
           "Данные и формы в React 19: Suspense, use, actions, useOptimistic"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "paid",
         "taskCount": 0
       },
@@ -311,7 +311,7 @@
           "Производительность и тестирование: Profiler, виртуализация, code splitting, Testing Library"
         ],
         "quizCount": 12,
-        "quizVariants": 1,
+        "quizVariants": 5,
         "access": "paid",
         "taskCount": 0
       }
